@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python/
+env/
+venv/
+.venv/
+# Distribution / packaging
+.Python
+build/
+dist/
+wheels/
+*.egg-info/
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.bak
+# OS generated files
+.DS_Store
+.localized
+Thumbs.db
+# Streamlit
+.streamlit/secrets.toml
+# Google Cloud / Firebase / Drive credentials
+gdrive_credentials.json
+firebase-service-account.json
+token.pickle
+# Temporary files
+*.tmp
+*.temp
+# Jupyter Notebook
+.ipynb_checkpoints/
+# Deployment scripts and configs (if not part of repo)
+deploy.sh
+deploy.ps1
+cloudbuild.yaml
+# Other generated files
+requirements.txt
+requirements_cloud.txt
+# Test files
+test_*.py
+debug_*.py
+check_*.py
+# Data files
+user_data_export.json
+*.log
+*.csv
+*.db
+*.sqlite
+# Environment variables
+.env
+.env.local
+.env.production
+.env.staging
+# Node modules (if any)
+node_modules/
+package-lock.json
+# Backup files
+*.backup
+*.bak
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*

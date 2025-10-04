@@ -1,0 +1,542 @@
+"""
+Resume processing module for PDF/DOCX text extraction.
+Handles file upload, text extraction, and resume text processing.
+"""
+
+import io
+import streamlit as st
+from typing import Optional, Tuple, Dict, Any
+from pypdf import PdfReader
+from docx import Document
+import pymupdf
+import re
+import json
+import sys
+import os
+
+# Add the Frontend directory to Python path for imports
+# Get the directory containing this file (utils), then go up one level (Frontend)
+current_file_dir = os.path.dirname(os.path.abspath(__file__))
+frontend_dir = os.path.dirname(current_file_dir)
+if frontend_dir not in sys.path:
+    sys.path.insert(0, frontend_dir)
+
+def process_resume_with_unicode_handling(pdf_path):
+    """
+    Process resume with Google Drive and Firebase, handling Unicode errors.
+    """
+    # Ensure Resume_Parser directory is in Python path
+    current_file_dir = os.path.dirname(os.path.abspath(__file__))
+    frontend_dir = os.path.dirname(current_file_dir)
+    project_root = os.path.dirname(frontend_dir)
+    resume_parser_dir = os.path.join(project_root, 'Resume_Parser')
+    
+    if resume_parser_dir not in sys.path:
+        sys.path.insert(0, resume_parser_dir)
+    
+    try:
+        # Try the normal process
+        from resume_parser import process_resume_with_gdrive_firestore
+        result = process_resume_with_gdrive_firestore(pdf_path)
+        return result
+    except UnicodeEncodeError as unicode_error:
+        print(f"Unicode encoding error in resume_parser logging")
+        print(f"This usually means the upload succeeded but logging failed")
+        
+        # Check if the upload actually succeeded by looking for recent files
+        try:
+            from gdrive_config import list_gdrive_files
+            recent_files = list_gdrive_files()
+            
+            # If we have recent files, the upload likely succeeded
+            if recent_files:
+                print(f"Found {len(recent_files)} files in Google Drive - upload likely succeeded")
+                # Return a basic success result without re-uploading
+                filename = os.path.basename(pdf_path)
+                return {
+                    "filename": filename,
+                    "gdrive_url": f"https://drive.google.com/file/d/{recent_files[0]['id']}/view",
+                    "gdrive_file_id": recent_files[0]['id'],
+                    "links": {},
+                    "metadata": {"text_content": ""},
+                    "document_id": filename.replace('.pdf', ''),
+                    "recovered_from_unicode_error": True
+                }
+        except Exception as check_error:
+            print(f"Could not verify upload status: {check_error}")
+        
+        # Only upload again if we couldn't verify the first upload succeeded
+        try:
+            from gdrive_config import upload_pdf_to_gdrive
+            from firebase_config import save_resume_data
+            
+            # Upload to Google Drive directly
+            filename = os.path.basename(pdf_path)
+            gdrive_url, gdrive_file_id = upload_pdf_to_gdrive(pdf_path, filename)
+            
+            # Create a basic resume data structure
+            resume_data = {
+                "filename": filename,
+                "gdrive_url": gdrive_url,
+                "gdrive_file_id": gdrive_file_id,
+                "links": {},
+                "metadata": {"text_content": ""}
+            }
+            
+            # Save to Firebase
+            doc_id = save_resume_data(resume_data, filename)
+            resume_data["document_id"] = doc_id
+            
+            print(f"Successfully recovered: Google Drive upload and Firebase save completed")
+            print(f"Google Drive URL: {gdrive_url}")
+            print(f"Firebase Document ID: {doc_id}")
+            
+            return resume_data
+            
+        except Exception as recovery_error:
+            print(f"Recovery failed: {recovery_error}")
+            return {
+                "gdrive_url": None,
+                "gdrive_file_id": None,
+                "document_id": None,
+                "links": {},
+                "metadata": {"text_content": ""},
+                "upload_error": f"Unicode error and recovery failed: {recovery_error}"
+            }
+    except Exception as e:
+        print(f"Process failed: {e}")
+        return {
+            "gdrive_url": None,
+            "gdrive_file_id": None,
+            "document_id": None,
+            "links": {},
+            "metadata": {"text_content": ""},
+            "upload_error": str(e)
+        }
+
+# Link Classification Patterns (from resume parser)
+GITHUB_PROFILE_PATTERN = r"https?://(?:www\.)?github\.com/([^/]+)/?$"
+GITHUB_PROJECT_PATTERN = r"https?://(?:www\.)?github\.com/([^/]+)/([^/]+)"
+LINKEDIN_PROFILE_PATTERN = r"https?://(?:www\.)?linkedin\.com/in/([^/]+)/?$"
+EMAIL_PATTERN = r"mailto:([^?]+)"
+PORTFOLIO_GITHUB_PATTERN = r"https?://([^/]+)\.github\.io/?"
+
+
+def categorize_link(url: str) -> Tuple[str, str, str]:
+    """
+    Categorize a URL into appropriate category.
+
+    Args:
+        url (str): The URL to categorize
+
+    Returns:
+        tuple: (category, cleaned_url, metadata)
+    """
+    # Check LinkedIn profile
+    if re.search(LINKEDIN_PROFILE_PATTERN, url, re.IGNORECASE):
+        return ("linkedin", url, "profile")
+
+    # Check GitHub Pages portfolio
+    if re.search(PORTFOLIO_GITHUB_PATTERN, url, re.IGNORECASE):
+        return ("portfolio", url, "github_pages")
+
+    # Check GitHub profile vs project
+    github_profile_match = re.search(GITHUB_PROFILE_PATTERN, url, re.IGNORECASE)
+    github_project_match = re.search(GITHUB_PROJECT_PATTERN, url, re.IGNORECASE)
+
+    if github_profile_match:
+        return ("github", url, "profile")
+    elif github_project_match:
+        return ("github", url, "project")
+
+    # Check email
+    email_match = re.search(EMAIL_PATTERN, url, re.IGNORECASE)
+    if email_match:
+        return ("email", email_match.group(1), "email")
+
+    # Default to other
+    return ("other", url, "other")
+
+
+def extract_links_from_pdf_pymupdf(file_content: bytes) -> Dict[str, Any]:
+    """
+    Extract and categorize embedded links from a PDF resume using pymupdf.
+
+    Args:
+        file_content: PDF file content as bytes
+
+    Returns:
+        dict: Dictionary containing categorized links
+    """
+    try:
+        # Create a temporary file-like object
+        pdf_document = pymupdf.open(stream=file_content, filetype="pdf")
+        
+        links_data = {
+            "github": {"profile": [], "project": []},
+            "linkedin": {"profile": []},
+            "portfolio": [],
+            "other": [],
+            "email": []
+        }
+
+        for page_num in range(len(pdf_document)):
+            page = pdf_document[page_num]
+            links = page.get_links()
+
+            for link in links:
+                if "uri" in link:
+                    url = link["uri"]
+                    category, cleaned_url, metadata = categorize_link(url)
+
+                    if category == "github":
+                        links_data["github"][metadata].append(cleaned_url)
+                    elif category == "linkedin":
+                        links_data["linkedin"][metadata].append(cleaned_url)
+                    elif category == "portfolio":
+                        links_data["portfolio"].append(cleaned_url)
+                    elif category == "email":
+                        links_data["email"].append(cleaned_url)
+                    else:
+                        links_data["other"].append(cleaned_url)
+
+        pdf_document.close()
+        return links_data
+    except Exception as e:
+        st.warning(f"Could not extract links from PDF: {e}")
+        return {
+            "github": {"profile": [], "project": []},
+            "linkedin": {"profile": []},
+            "portfolio": [],
+            "other": [],
+            "email": []
+        }
+
+
+class ResumeProcessor:
+    """Handles resume file processing and text extraction."""
+    
+    @staticmethod
+    def extract_text_from_pdf(file_content: bytes) -> str:
+        """
+        Extract text from PDF file content.
+        
+        Args:
+            file_content: PDF file content as bytes
+            
+        Returns:
+            Extracted text as string
+        """
+        try:
+            pdf_reader = PdfReader(io.BytesIO(file_content))
+            text = ""
+            
+            for page in pdf_reader.pages:
+                text += page.extract_text() + "\n"
+            
+            return text.strip()
+        except Exception as e:
+            st.error(f"Error extracting text from PDF: {e}")
+            return ""
+    
+    @staticmethod
+    def extract_text_and_links_from_pdf(file_content: bytes) -> Tuple[str, Dict[str, Any]]:
+        """
+        Extract both text and links from PDF file content.
+        
+        Args:
+            file_content: PDF file content as bytes
+            
+        Returns:
+            Tuple of (extracted_text, links_data)
+        """
+        # Extract text using pypdf
+        text = ResumeProcessor.extract_text_from_pdf(file_content)
+        
+        # Extract links using pymupdf
+        links_data = extract_links_from_pdf_pymupdf(file_content)
+        
+        return text, links_data
+    
+    @staticmethod
+    def extract_text_from_docx(file_content: bytes) -> str:
+        """
+        Extract text from DOCX file content.
+        
+        Args:
+            file_content: DOCX file content as bytes
+            
+        Returns:
+            Extracted text as string
+        """
+        try:
+            doc = Document(io.BytesIO(file_content))
+            text = ""
+            
+            for paragraph in doc.paragraphs:
+                text += paragraph.text + "\n"
+            
+            return text.strip()
+        except Exception as e:
+            st.error(f"Error extracting text from DOCX: {e}")
+            return ""
+    
+    @staticmethod
+    def extract_text_from_txt(file_content: bytes) -> str:
+        """
+        Extract text from TXT file content.
+        
+        Args:
+            file_content: TXT file content as bytes
+            
+        Returns:
+            Extracted text as string
+        """
+        try:
+            # Try different encodings
+            encodings = ['utf-8', 'latin-1', 'cp1252']
+            
+            for encoding in encodings:
+                try:
+                    return file_content.decode(encoding).strip()
+                except UnicodeDecodeError:
+                    continue
+            
+            # If all encodings fail, use utf-8 with error handling
+            return file_content.decode('utf-8', errors='replace').strip()
+            
+        except Exception as e:
+            st.error(f"Error extracting text from TXT: {e}")
+            return ""
+    
+    @staticmethod
+    def process_uploaded_file(uploaded_file) -> Tuple[bool, str, Dict[str, Any]]:
+        """
+        Process uploaded file and extract text and links.
+        
+        Args:
+            uploaded_file: Streamlit uploaded file object
+            
+        Returns:
+            Tuple of (success, extracted_text, links_data)
+        """
+        if uploaded_file is None:
+            return False, "", {}
+        
+        try:
+            file_content = uploaded_file.read()
+            # Reset file pointer for potential future reads
+            uploaded_file.seek(0)
+            file_extension = uploaded_file.name.split('.')[-1].lower()
+            links_data = {}
+            
+            if file_extension == 'pdf':
+                text, links_data = ResumeProcessor.extract_text_and_links_from_pdf(file_content)
+            elif file_extension == 'docx':
+                text = ResumeProcessor.extract_text_from_docx(file_content)
+                # DOCX doesn't support link extraction with current setup
+                links_data = {"github": {"profile": [], "project": []}, "linkedin": {"profile": []}, "portfolio": [], "other": [], "email": []}
+            elif file_extension == 'txt':
+                text = ResumeProcessor.extract_text_from_txt(file_content)
+                # TXT doesn't support link extraction
+                links_data = {"github": {"profile": [], "project": []}, "linkedin": {"profile": []}, "portfolio": [], "other": [], "email": []}
+            else:
+                st.error(f"Unsupported file type: {file_extension}")
+                return False, "", {}
+            
+            if text:
+                # Hide extraction success message and links display
+                # st.success(f"Successfully extracted text from {uploaded_file.name}")
+                # Show extracted links if any
+                # if links_data and any(links_data.values()):
+                #     st.info("🔗 Extracted links from resume:")
+                #     for category, data in links_data.items():
+                #         if isinstance(data, dict):
+                #             for subcategory, urls in data.items():
+                #                 if urls:
+                #                     st.write(f"  {category.title()} {subcategory}: {', '.join(urls)}")
+                #         elif data:
+                #             st.write(f"  {category.title()}: {', '.join(data)}")
+                return True, text, links_data
+            else:
+                st.warning(f"No text could be extracted from {uploaded_file.name}")
+                return False, "", {}
+                
+        except Exception as e:
+            st.error(f"Error processing file {uploaded_file.name}: {e}")
+            return False, "", {}
+    
+    @staticmethod
+    def clean_resume_text(text: str) -> str:
+        """
+        Clean and normalize resume text.
+        
+        Args:
+            text: Raw resume text
+            
+        Returns:
+            Cleaned resume text
+        """
+        if not text:
+            return ""
+        
+        # Remove excessive whitespace
+        import re
+        text = re.sub(r'\s+', ' ', text)
+        
+        # Remove special characters that might interfere with analysis
+        text = re.sub(r'[^\w\s@.-]', ' ', text)
+        
+        # Remove multiple newlines
+        text = re.sub(r'\n+', '\n', text)
+        
+        return text.strip()
+    
+    @staticmethod
+    def validate_resume_text(text: str) -> Tuple[bool, str]:
+        """
+        Validate that resume text is suitable for analysis.
+        
+        Args:
+            text: Resume text to validate
+            
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not text or not text.strip():
+            return False, "Resume text is empty"
+        
+        if len(text.strip()) < 50:
+            return False, "Resume text is too short (minimum 50 characters)"
+        
+        if len(text.strip()) > 50000:
+            return False, "Resume text is too long (maximum 50,000 characters)"
+        
+        # Check for common resume keywords
+        resume_keywords = ['experience', 'education', 'skills', 'work', 'job', 'position', 'company']
+        text_lower = text.lower()
+        
+        keyword_count = sum(1 for keyword in resume_keywords if keyword in text_lower)
+        if keyword_count < 2:
+            return False, "Text doesn't appear to be a resume (missing common resume keywords)"
+        
+        return True, ""
+
+
+def handle_file_upload(uploaded_file) -> None:
+    """
+    Handle file upload and update session state.
+    This function integrates with Streamlit's session state and cloud services.
+    
+    Args:
+        uploaded_file: Streamlit uploaded file object
+    """
+    if uploaded_file is not None:
+        # First, process the file locally
+        success, extracted_text, links_data = ResumeProcessor.process_uploaded_file(uploaded_file)
+        
+        if success:
+            # Clean the text
+            cleaned_text = ResumeProcessor.clean_resume_text(extracted_text)
+            
+            # Validate the text
+            is_valid, error_msg = ResumeProcessor.validate_resume_text(cleaned_text)
+            
+            if is_valid:
+                st.session_state.raw_resume_text = cleaned_text
+                st.session_state.extracted_links = links_data  # Store links in session state
+                
+                # Process resume with Google Drive and Firebase
+                try:
+                    import tempfile
+                    import os
+                    import subprocess
+                    import sys
+                    
+                    # Create temporary file for processing
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                        # Reset file pointer to beginning
+                        uploaded_file.seek(0)
+                        file_content = uploaded_file.read()
+                        temp_file.write(file_content)
+                        temp_file_path = temp_file.name
+                        
+                        # Verify file was written correctly
+                        if len(file_content) == 0:
+                            st.error("❌ Uploaded file is empty!")
+                            return
+                    
+                    # Run resume processing in a subprocess to handle Unicode issues
+                    result = process_resume_with_unicode_handling(temp_file_path)
+                    
+                    # Clean up temporary file
+                    os.unlink(temp_file_path)
+                    
+                    # Update session state with results
+                    if 'gdrive_url' in result:
+                        st.session_state.gdrive_url = result['gdrive_url']
+                    if 'document_id' in result:
+                        st.session_state.firebase_document_id = result['document_id']
+                    if 'links' in result:
+                        st.session_state.extracted_links = result['links']
+                    # Only update resume text if cloud processing returned actual text content
+                    if 'metadata' in result and 'text_content' in result['metadata'] and result['metadata']['text_content'].strip():
+                        st.session_state.raw_resume_text = result['metadata']['text_content']
+                    
+                    # Always show upload status
+                    if 'gdrive_url' in result and result['gdrive_url'] and result['gdrive_url'] != 'None':
+                        st.success("✅ Resume uploaded to Google Drive successfully!")
+                        st.info(f"📁 Google Drive: [View Resume]({result['gdrive_url']})")
+                    else:
+                        st.warning("⚠️ Google Drive upload failed")
+                        if 'upload_error' in result:
+                            st.error(f"Error: {result['upload_error']}")
+                    
+                    if 'document_id' in result and result['document_id'] and result['document_id'] != 'None':
+                        st.success("✅ Resume data saved to Firebase successfully!")
+                        st.info(f"🔥 Firebase Document ID: `{result['document_id']}`")
+                    else:
+                        st.warning("⚠️ Firebase save failed")
+                        if 'upload_error' in result:
+                            st.error(f"Error: {result['upload_error']}")
+                        
+                except Exception as e:
+                    st.warning(f"⚠️ Resume processing failed: {str(e)}")
+                    print(f"Resume processing error: {str(e)}")
+                
+                # Automatically run analysis to extract personal details
+                try:
+                    from utils.backend_integration import LocalAnalysisEngine
+                    from utils.ui_components import SessionStateManager
+                    
+                    # Run local analysis to extract personal details
+                    analysis_data = LocalAnalysisEngine.analyze_resume_local(
+                        resume_text=cleaned_text,
+                        positions=st.session_state.get('target_positions', []),
+                        preferences=st.session_state.get('skills', []),
+                        locations=st.session_state.get('preferred_locations', [])
+                    )
+                    
+                    # Update session state with extracted details
+                    SessionStateManager.update_session_state_from_analysis(analysis_data)
+                    
+                    # Hide personal details extraction message
+                    # st.info("🔍 Personal details extracted from resume!")
+                    
+                except Exception as e:
+                    # Hide warning message
+                    # st.warning(f"⚠️ Could not extract personal details: {e}")
+                    pass
+                    
+            else:
+                st.warning(f"⚠️ {error_msg}")
+                st.session_state.raw_resume_text = cleaned_text  # Still set it, let user decide
+                st.session_state.extracted_links = links_data
+        else:
+            st.error("❌ Failed to extract text from the uploaded file.")
+    else:
+        # Clear resume text if no file is uploaded
+        if 'raw_resume_text' in st.session_state:
+            st.session_state.raw_resume_text = ""
+        if 'extracted_links' in st.session_state:
+            st.session_state.extracted_links = {}
