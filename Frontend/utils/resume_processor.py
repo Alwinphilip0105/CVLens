@@ -119,6 +119,41 @@ def process_resume_with_unicode_handling(pdf_path):
             "firebase_error": str(e)
         }
 
+
+def process_resume_without_firestore(pdf_path):
+    """
+    Process resume WITHOUT uploading to Firestore, just extract data.
+    
+    Args:
+        pdf_path: Path to the PDF file
+        
+    Returns:
+        dict: Resume data without Firestore upload
+    """
+    # Ensure Resume_Parser directory is in Python path
+    current_file_dir = os.path.dirname(os.path.abspath(__file__))
+    frontend_dir = os.path.dirname(current_file_dir)
+    project_root = os.path.dirname(frontend_dir)
+    resume_parser_dir = os.path.join(project_root, 'Resume_Parser')
+    
+    if resume_parser_dir not in sys.path:
+        sys.path.insert(0, resume_parser_dir)
+    
+    try:
+        from resume_parser import process_resume  # Import the function without Firestore
+        resume_data = process_resume(pdf_path)
+        
+        return {
+            "success": True,
+            "resume_data": resume_data,
+            "message": "Resume processed successfully (no Firestore upload)"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Resume processing failed: {str(e)}"
+        }
+
 # Link Classification Patterns (from resume parser)
 GITHUB_PROFILE_PATTERN = r"https?://(?:www\.)?github\.com/([^/]+)/?$"
 GITHUB_PROJECT_PATTERN = r"https?://(?:www\.)?github\.com/([^/]+)/([^/]+)"
@@ -475,30 +510,38 @@ def handle_file_upload(uploaded_file) -> None:
 
                     # --- END NEW LOGIC ---
 
-                    # Run resume processing (uses temp_file_path which now contains the desired ID)
-                    result = process_resume_with_unicode_handling(temp_file_path)
+                    # Run resume processing WITHOUT Firestore upload (just extract data)
+                    result = process_resume_without_firestore(temp_file_path)
                     
                     # Clean up temporary file
                     if os.path.exists(temp_file_path):
                         os.unlink(temp_file_path)
                     
                     # Update session state with results
-                    if 'document_id' in result:
-                        st.session_state.firebase_document_id = result['document_id']
-                    if 'links' in result:
-                        st.session_state.extracted_links = result['links']
-                    # Only update resume text if cloud processing returned actual text content
-                    if 'metadata' in result and 'text_content' in result['metadata'] and result['metadata']['text_content'].strip():
-                        st.session_state.raw_resume_text = result['metadata']['text_content']
-                    
-                    # Show upload status
-                    if 'document_id' in result and result['document_id'] and result['document_id'] != 'None':
-                        st.success("✅ Resume data saved to Firestore successfully!")
-                        st.info(f"🔥 Firestore Document ID: `{result['document_id']}`")
+                    if result.get('success', False):
+                        # Store the planned document ID for later Firestore upload
+                        st.session_state.resume_document_id = document_id_prefix
+                        st.session_state.resume_file_name = uploaded_file.name
+                        st.session_state.resume_file_path = temp_file_path
+                        
+                        # Store the parsed resume data
+                        if 'resume_data' in result:
+                            st.session_state.resume_json_data = result['resume_data']
+                            
+                            # Extract text content for display
+                            if 'text_content' in result['resume_data']:
+                                st.session_state.raw_resume_text = result['resume_data']['text_content']
+                            
+                            # Extract links if available
+                            if 'links' in result['resume_data']:
+                                st.session_state.extracted_links = result['resume_data']['links']
+                        
+                        st.success("✅ Resume processed successfully!")
+                        st.info(f"📄 Resume data ready for analysis. Document ID will be: `{document_id_prefix}`")
                     else:
-                        st.warning("⚠️ Firestore save failed")
-                        if 'firebase_error' in result:
-                            st.error(f"Error: {result['firebase_error']}")
+                        st.warning("⚠️ Resume processing failed")
+                        if 'error' in result:
+                            st.error(f"Error: {result['error']}")
                         
                 except Exception as e:
                     st.warning(f"⚠️ Resume processing failed: {str(e)}")

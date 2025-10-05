@@ -18,7 +18,7 @@ if frontend_dir not in sys.path:
 from utils.validation import validate_form_before_analysis
 from utils.resume_processor import handle_file_upload
 from utils.data_models import STANDARD_LOCATIONS, STANDARD_POSITIONS, STANDARD_JOB_TYPES, ALL_STANDARD_PREFERENCES
-from utils.backend_integration import send_resume_data_to_backend, analyze_resume_logic, generate_job_recommendations, print_ui_data_to_terminal
+from utils.backend_integration import send_resume_data_to_backend, analyze_resume_logic, generate_job_recommendations, print_ui_data_to_terminal, save_combined_data_to_firestore, test_firestore_connection
 from utils.ui_components import (
     LoadingOverlay, CustomCSS, FormComponents, MultiselectWithCustom, 
     DisplayComponents, SessionStateManager
@@ -48,13 +48,55 @@ def update_skills():
 
 # Set page config first
 st.set_page_config(
-    page_title="AI Career Optimization Tool",
+    page_title="CVLens - AI Career Optimization",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # Apply custom styles
 CustomCSS.apply_custom_styles()
+
+
+# Additional sidebar gradient CSS for better compatibility
+st.markdown("""
+<style>
+/* Force sidebar gradient with maximum specificity */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(135deg, #0d0505 0%, #1a0a0a 25%, #2d0d0d 50%, #3d1515 75%, #4d1a1a 100%) !important;
+}
+
+.stSidebar {
+    background: linear-gradient(135deg, #0d0505 0%, #1a0a0a 25%, #2d0d0d 50%, #3d1515 75%, #4d1a1a 100%) !important;
+}
+
+[data-testid="stSidebar"] {
+    background: linear-gradient(135deg, #0d0505 0%, #1a0a0a 25%, #2d0d0d 50%, #3d1515 75%, #4d1a1a 100%) !important;
+}
+
+/* Sidebar text color */
+.stSidebar .stMarkdown {
+    color: #ffffff !important;
+}
+
+.stSidebar .stMarkdown h1,
+.stSidebar .stMarkdown h2,
+.stSidebar .stMarkdown h3 {
+    color: #ffffff !important;
+}
+
+/* Sidebar buttons */
+.stSidebar .stButton > button {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.stSidebar .stButton > button:hover {
+    background: #007aff !important;
+    color: white !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 # Constants
 MAX_LOCATIONS = 6
@@ -95,19 +137,14 @@ def show_resume_text_modal():
         st.info("💡 **Tip:** Manually edit the text above to ensure accuracy before running the analysis.")
 
 
-def profile_analysis_tab():
-    """Content for the Profile Analysis tab."""
-    st.header("Profile Analysis & Data Extraction")
-    st.markdown("---")
+def profile_analysis_page():
+    """Profile Analysis page with sidebar navigation."""
+    st.markdown('<div class="feature-card">', unsafe_allow_html=True)
+    st.markdown('<h3>📊 Profile Analysis & Data Extraction</h3>', unsafe_allow_html=True)
 
     # Info button explaining required fields
     FormComponents.info_button_with_tooltip()
     
-    # Debug toggle (remove this in production)
-    if st.checkbox("🐛 Debug Mode", help="Show debug information for multiselect"):
-        st.session_state.debug_mode = True
-    else:
-        st.session_state.debug_mode = False
     
     # Resume processing status
     if st.session_state.get('firebase_document_id'):
@@ -142,9 +179,6 @@ def profile_analysis_tab():
             char_count = len(st.session_state.raw_resume_text)
             st.caption(f"Characters: {char_count:,}")
             
-            # Show Resume_Parser status
-            if st.session_state.raw_resume_text:
-                st.success("✅ Processed with Resume_Parser (Enhanced PDF parsing + Firestore storage)")
         
         with col2:
             st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing
@@ -200,10 +234,6 @@ def profile_analysis_tab():
         if 'location_select' in st.session_state:
             st.session_state.preferred_locations = st.session_state.location_select
         
-        # Debug: Show current selections
-        if st.session_state.get('debug_mode', False):
-            st.write(f"Debug - Selected locations: {selected_locs}")
-            st.write(f"Debug - Session state locations: {st.session_state.preferred_locations}")
         
         # Custom location input (compact)
         col1, col2 = st.columns([4, 1])
@@ -219,7 +249,6 @@ def profile_analysis_tab():
         # Handle location addition
         if add_location_clicked and custom_location and custom_location.strip():
             location = custom_location.strip()
-            print(f"TERMINAL: Attempting to add location: {location}")
             
             # Validate location before adding
             from utils.validation import FormValidator
@@ -228,16 +257,11 @@ def profile_analysis_tab():
             if is_valid:
                 if location not in st.session_state.preferred_locations:
                     st.session_state.preferred_locations.append(location)
-                    print(f"TERMINAL: Successfully added location: {location}")
-                    print(f"TERMINAL: Current locations: {st.session_state.preferred_locations}")
                     st.success(f"Added: {location}")
                 else:
-                    print(f"TERMINAL: Location already exists: {location}")
                     st.warning("Location already added!")
             else:
-                print(f"TERMINAL: Invalid location: {location} - {error_msg}")
                 st.error(f"Error: {error_msg}")
-            # Removed st.rerun() to reduce lag
 
         # Job Targets Multi-Select (Compact)
         st.markdown("**🎯 Target Positions**")
@@ -254,10 +278,7 @@ def profile_analysis_tab():
         if 'position_select' in st.session_state:
             st.session_state.target_positions = st.session_state.position_select
         
-        # Debug: Show current selections
-        if st.session_state.get('debug_mode', False):
-            st.write(f"Debug - Target positions: {target_positions}")
-            st.write(f"Debug - Session state positions: {st.session_state.target_positions}")
+        
 
         # Job Types Multi-Select (Compact)
         st.markdown("**💼 Job Types**")
@@ -297,10 +318,6 @@ def profile_analysis_tab():
         if 'skill_select' in st.session_state:
             st.session_state.skills = st.session_state.skill_select
         
-        # Debug: Show current selections
-        if st.session_state.get('debug_mode', False):
-            st.write(f"Debug - Selected skills: {selected_skills}")
-            st.write(f"Debug - Session state skills: {st.session_state.skills}")
         
         # Custom skill input (compact)
         col1, col2 = st.columns([4, 1])
@@ -316,7 +333,6 @@ def profile_analysis_tab():
         # Handle skill addition
         if add_skill_clicked and custom_skill and custom_skill.strip():
             skill = custom_skill.strip()
-            print(f"TERMINAL: Attempting to add skill: {skill}")
             
             # Validate skill before adding
             from utils.validation import FormValidator
@@ -325,16 +341,11 @@ def profile_analysis_tab():
             if is_valid:
                 if skill not in st.session_state.skills:
                     st.session_state.skills.append(skill)
-                    print(f"TERMINAL: Successfully added skill: {skill}")
-                    print(f"TERMINAL: Current skills: {st.session_state.skills}")
                     st.success(f"Added: {skill}")
                 else:
-                    print(f"TERMINAL: Skill already exists: {skill}")
                     st.warning("Skill already added!")
             else:
-                print(f"TERMINAL: Invalid skill: {skill} - {error_msg}")
                 st.error(f"Error: {error_msg}")
-            # Removed st.rerun() to reduce lag
 
     # Analyze Profile Button
     st.markdown("---")
@@ -342,6 +353,7 @@ def profile_analysis_tab():
     
     with col2:
         if st.button("🚀 Analyze Profile", type="primary", use_container_width=True):
+            
             # Validate form before analysis
             if validate_form_before_analysis(st.session_state):
                 st.session_state.is_analyzing = True
@@ -349,13 +361,45 @@ def profile_analysis_tab():
             else:
                 st.warning("Please fill in all required fields before analysis.")
 
+    # Close the feature card
+    st.markdown('</div>', unsafe_allow_html=True)
+    
     # Show loading overlay when analyzing
     if st.session_state.get('is_analyzing', False):
         LoadingOverlay.show_loading_overlay()
         
         # Perform the actual analysis
         try:
-            # Send data to backend first
+            # Force update session state from multiselect components
+            if 'position_select' in st.session_state:
+                st.session_state.target_positions = st.session_state.position_select
+            
+            if 'location_select' in st.session_state:
+                st.session_state.preferred_locations = st.session_state.location_select
+            
+            if 'skill_select' in st.session_state:
+                st.session_state.skills = st.session_state.skill_select
+            
+            if 'job_type_select' in st.session_state:
+                st.session_state.selected_job_types = st.session_state.job_type_select
+            
+            # Test Firestore connection first
+            if not test_firestore_connection():
+                st.error("❌ Cannot connect to Firestore. Please check Firebase configuration.")
+                st.session_state.is_analyzing = False
+                st.rerun()
+                return
+            
+            # Save combined data to Firestore first
+            firestore_doc_id = save_combined_data_to_firestore(st.session_state)
+            
+            if firestore_doc_id:
+                st.success("✅ Combined data saved to Firestore successfully!")
+                st.info(f"🔥 Firestore Document ID: `{firestore_doc_id}`")
+            else:
+                st.warning("⚠️ Failed to save data to Firestore")
+            
+            # Send data to backend/n8n
             backend_response = send_resume_data_to_backend(st.session_state)
             
             if backend_response:
@@ -446,10 +490,10 @@ def display_webhook_response():
                     st.write("---")
 
 
-def job_recommendations_tab():
-    """Content for the Job Recommendations tab."""
-    st.header("Job Recommendations")
-    st.markdown("---")
+def job_recommendations_page():
+    """Job Recommendations page with sidebar navigation."""
+    st.markdown('<div class="feature-card">', unsafe_allow_html=True)
+    st.markdown('<h3>💼 Job Recommendations</h3>', unsafe_allow_html=True)
     
     if st.session_state.get('analyzed_data'):
         # Analysis Results section removed - only process final edited data
@@ -494,44 +538,147 @@ def job_recommendations_tab():
         st.markdown("3. **View personalized job recommendations** based on your skills and experience")
         st.markdown("4. **Click on job titles** to apply directly to positions")
         st.markdown("5. **Save your complete profile to cloud** for future access")
-
-
-def resume_improver_tab():
-    """Content for the Resume Improver tab."""
-    st.header("Resume Improvement Suggestions")
-    st.markdown("---")
     
-    if st.session_state.get('analyzed_data'):
-        st.success("✅ Resume analysis completed!")
-        
-        # Show improvement suggestions
-        st.markdown("### AI-Powered Improvement Suggestions")
-        
-        suggestions = [
-            "Add more specific technical skills and certifications",
-            "Include quantifiable achievements and metrics",
-            "Optimize keywords for ATS (Applicant Tracking Systems)",
-            "Highlight relevant project experience",
-            "Include industry-specific terminology"
-        ]
-        
-        for i, suggestion in enumerate(suggestions, 1):
-            st.write(f"{i}. {suggestion}")
-        
-        # Show current resume text for editing
-        st.markdown("### Edit Your Resume")
+    # Close the feature card
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+def resume_tips_page():
+    """Resume Tips page with sidebar navigation."""
+    st.markdown('<div class="feature-card">', unsafe_allow_html=True)
+    st.markdown('<h3>✨ Resume Tips & Improvement Guide</h3>', unsafe_allow_html=True)
+    
+    # Resume Tips Content
+    st.markdown("### 🎯 Essential Resume Tips")
+    
+    # Tip 1: Formatting
+    with st.expander("📝 **1. Professional Formatting**", expanded=True):
+        st.markdown("""
+        **Key Points:**
+        - Use a clean, professional font (Arial, Calibri, or Times New Roman)
+        - Keep font size between 10-12 points
+        - Use consistent formatting throughout
+        - Include proper spacing and margins
+        - Save as PDF to preserve formatting
+        """)
+    
+    # Tip 2: Content Structure
+    with st.expander("🏗️ **2. Content Structure**", expanded=False):
+        st.markdown("""
+        **Recommended Sections:**
+        - **Contact Information**: Name, phone, email, LinkedIn
+        - **Professional Summary**: 2-3 lines highlighting your value
+        - **Work Experience**: Most recent first, use action verbs
+        - **Education**: Degree, institution, graduation year
+        - **Skills**: Technical and soft skills relevant to the job
+        - **Certifications**: Professional certifications and licenses
+        """)
+    
+    # Tip 3: Keywords
+    with st.expander("🔍 **3. ATS Optimization**", expanded=False):
+        st.markdown("""
+        **ATS (Applicant Tracking System) Tips:**
+        - Include relevant keywords from the job description
+        - Use standard section headings (Experience, Education, Skills)
+        - Avoid graphics, tables, or complex formatting
+        - Use common file formats (PDF or Word)
+        - Include variations of important terms
+        """)
+    
+    # Tip 4: Quantify Achievements
+    with st.expander("📊 **4. Quantify Your Achievements**", expanded=False):
+        st.markdown("""
+        **Use Numbers and Metrics:**
+        - "Increased sales by 25% in Q3"
+        - "Managed a team of 12 employees"
+        - "Reduced costs by $50,000 annually"
+        - "Improved customer satisfaction by 15%"
+        - "Led 5 successful projects worth $2M total"
+        """)
+    
+    # Tip 5: Tailoring
+    with st.expander("🎯 **5. Tailor for Each Job**", expanded=False):
+        st.markdown("""
+        **Customization Strategy:**
+        - Study the job description carefully
+        - Match your skills to their requirements
+        - Use their language and terminology
+        - Highlight relevant experience first
+        - Remove irrelevant information
+        """)
+    
+    # Interactive Resume Builder
+    st.markdown("---")
+    st.markdown("### 🛠️ Interactive Resume Builder")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Current Resume Analysis:**")
+        if st.session_state.get('analyzed_data'):
+            st.success("✅ Resume analyzed successfully!")
+            
+            # Show improvement suggestions
+            suggestions = [
+                "Add more specific technical skills",
+                "Include quantifiable achievements",
+                "Optimize keywords for ATS",
+                "Highlight relevant project experience",
+                "Include industry-specific terminology"
+            ]
+            
+            for i, suggestion in enumerate(suggestions, 1):
+                st.write(f"{i}. {suggestion}")
+        else:
+            st.info("Upload and analyze your resume to get personalized suggestions.")
+    
+    with col2:
+        st.markdown("**Resume Score:**")
+        if st.session_state.get('analyzed_data'):
+            # Calculate a mock score based on content
+            score = 85  # This would be calculated based on actual analysis
+            st.metric("Overall Score", f"{score}/100")
+            
+            # Progress bar
+            st.progress(score / 100)
+            
+            if score >= 80:
+                st.success("Great job! Your resume is well-optimized.")
+            elif score >= 60:
+                st.warning("Good foundation, but room for improvement.")
+            else:
+                st.error("Consider significant improvements to your resume.")
+        else:
+            st.info("Analyze your resume to see your score.")
+    
+    # Resume Editing Section
+    st.markdown("---")
+    st.markdown("### ✏️ Edit Your Resume")
+    
+    if st.session_state.get('raw_resume_text'):
+        st.markdown("**Current Resume Text:**")
         improved_resume = st.text_area(
             "Resume Text (Editable)",
             value=st.session_state.raw_resume_text,
             height=400,
-            key='improved_resume_text'
+            key='improved_resume_text',
+            help="Edit your resume text here. Use the tips above to improve it."
         )
         
-        if st.button("💾 Save Improved Resume"):
-            st.session_state.raw_resume_text = improved_resume
-            st.success("Resume updated successfully!")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("💾 Save Improved Resume", use_container_width=True):
+                st.session_state.raw_resume_text = improved_resume
+                st.success("Resume updated successfully!")
+        
+        with col2:
+            if st.button("🔄 Reset to Original", use_container_width=True):
+                st.rerun()
     else:
-        st.info("Please run the profile analysis first to get improvement suggestions.")
+        st.info("Please upload and analyze your resume first to access the editing features.")
+    
+    # Close the feature card
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def main():
@@ -539,45 +686,52 @@ def main():
     # Initialize session state
     SessionStateManager.initialize_session_state()
     
-    # Main title
-    st.title("🚀 AI Career Optimization Tool")
-    st.markdown("**Transform your career with AI-powered resume analysis and job recommendations**")
-    st.markdown("---")
+    # Main container with modern design
+    st.markdown('<div class="main-container">', unsafe_allow_html=True)
     
-    # Debug section to check webhook response
-    if st.session_state.get('backend_data'):
-        st.sidebar.markdown("### 🔗 Webhook Status")
-        st.sidebar.success("✅ Webhook response received!")
+    # Header section
+    st.markdown('''
+    <div class="app-header">
+        <h1 class="app-title">🚀 CVLens</h1>
+        <p class="app-subtitle">Transform your career with AI-powered resume analysis and job recommendations</p>
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    # Sidebar Navigation
+    with st.sidebar:
+        st.markdown("## 🧭 Navigation")
+        st.markdown("---")
         
-        col1, col2 = st.sidebar.columns(2)
-        with col1:
-            if st.button("📋 View Response"):
-                st.sidebar.json(st.session_state.backend_data)
-        with col2:
-            if st.button("🖥️ Print to Terminal"):
-                # Use st.write to display in sidebar instead of print
-                st.sidebar.markdown("**Webhook Response:**")
-                st.sidebar.json(st.session_state.backend_data)
-                st.sidebar.success("✅ Displayed in sidebar!")
-    else:
-        st.sidebar.markdown("### 🔗 Webhook Status")
-        st.sidebar.info("⏳ No webhook response yet")
+        # Navigation buttons
+        if st.button("📊 Profile Analysis", use_container_width=True, key="nav_profile"):
+            st.session_state.current_page = "profile"
+            st.rerun()
+        
+        if st.button("💼 Job Recommendations", use_container_width=True, key="nav_jobs"):
+            st.session_state.current_page = "jobs"
+            st.rerun()
+        
+        if st.button("✨ Resume Tips", use_container_width=True, key="nav_tips"):
+            st.session_state.current_page = "tips"
+            st.rerun()
+        
+        st.markdown("---")
+        
     
-    # Create tabs
-    tab1, tab2, tab3 = st.tabs([
-        "📊 Profile Analysis", 
-        "💼 Job Recommendations", 
-        "✨ Resume Improver"
-    ])
-
-    with tab1:
-        profile_analysis_tab()
-
-    with tab2:
-        job_recommendations_tab()
-
-    with tab3:
-        resume_improver_tab()
+    # Initialize current page if not set
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = "profile"
+    
+    # Main content area based on selected page
+    if st.session_state.current_page == "profile":
+        profile_analysis_page()
+    elif st.session_state.current_page == "jobs":
+        job_recommendations_page()
+    elif st.session_state.current_page == "tips":
+        resume_tips_page()
+    
+    # Close main container
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 if __name__ == "__main__":

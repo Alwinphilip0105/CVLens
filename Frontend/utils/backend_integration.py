@@ -90,7 +90,7 @@ def print_ui_data_to_terminal(session_state: Dict[str, Any], analysis_data: Dict
 class BackendClient:
     """Client for communicating with backend services."""
     
-    def __init__(self, base_url: str = "https://ruhack.app.n8n.cloud/webhook-test/getdata"):
+    def __init__(self, base_url: str = "https://ruhack.app.n8n.cloud/webhook/getdata"):
         """
         Initialize backend client.
         
@@ -283,6 +283,160 @@ class LocalAnalysisEngine:
         }
 
 
+def test_firestore_connection() -> bool:
+    """
+    Test Firestore connection and permissions.
+    
+    Returns:
+        bool: True if connection successful, False otherwise
+    """
+    try:
+        import sys
+        import os
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        frontend_dir = os.path.dirname(current_file_dir)
+        project_root = os.path.dirname(frontend_dir)
+        resume_parser_dir = os.path.join(project_root, "Resume_Parser")
+        
+        if resume_parser_dir not in sys.path:
+            sys.path.insert(0, resume_parser_dir)
+        
+        # Check if Firebase service account file exists
+        service_account_path = os.path.join(resume_parser_dir, "firebase-service-account.json")
+        if not os.path.exists(service_account_path):
+            print(f"❌ Firebase service account file not found at: {service_account_path}")
+            return False
+        
+        print(f"✅ Firebase service account file found at: {service_account_path}")
+        
+        from firebase_config import initialize_firebase, list_firebase_documents
+        
+        print("🔄 Testing Firestore connection...")
+        db, bucket = initialize_firebase()
+        print("✅ Firebase initialized successfully")
+        
+        # Test reading from Firestore
+        docs = list_firebase_documents()
+        print(f"✅ Successfully connected to Firestore. Found {len(docs)} existing documents.")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Firestore connection test failed: {str(e)}")
+        import traceback
+        print(f"Full error traceback: {traceback.format_exc()}")
+        return False
+
+
+def save_combined_data_to_firestore(session_state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    Save combined resume data and user form data to Firestore.
+    
+    Args:
+        session_state: Streamlit session state dictionary containing both resume and user data
+        
+    Returns:
+        Firestore document ID or None if failed
+    """
+    try:
+        # Import Firebase functions
+        import sys
+        import os
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        frontend_dir = os.path.dirname(current_file_dir)
+        project_root = os.path.dirname(frontend_dir)
+        resume_parser_dir = os.path.join(project_root, "Resume_Parser")
+        
+        if resume_parser_dir not in sys.path:
+            sys.path.insert(0, resume_parser_dir)
+        
+        from firebase_config import save_resume_data
+        
+        # Get the planned document ID
+        document_id = session_state.get('resume_document_id', '')
+        if not document_id:
+            print("❌ No resume document ID found in session state")
+            return None
+        
+        # Get resume JSON data
+        resume_json_data = session_state.get('resume_json_data', {})
+        if not resume_json_data:
+            print("❌ No resume JSON data found in session state")
+            return None
+        
+        # Get form data with fallback to multiselect keys
+        def get_form_data(key, multiselect_key=None):
+            """Get form data with fallback to multiselect key"""
+            value = session_state.get(key, [])
+            if not value and multiselect_key:
+                value = session_state.get(multiselect_key, [])
+            return value if value else []
+        
+        # Create combined data structure
+        combined_data = {
+            # Resume data (from PDF parsing)
+            "resume_analysis": resume_json_data,
+            
+            # User form data
+            "user_profile": {
+                "full_name": session_state.get('full_name', ''),
+                "email": session_state.get('email', ''),
+                "contact": session_state.get('contact', ''),
+                "preferred_locations": get_form_data('preferred_locations', 'location_select'),
+                "target_positions": get_form_data('target_positions', 'position_select'),
+                "skills": get_form_data('skills', 'skill_select'),
+                "selected_job_types": get_form_data('selected_job_types', 'job_type_select')
+            },
+            
+            # Metadata
+            "metadata": {
+                "resume_file_name": session_state.get('resume_file_name', ''),
+                "resume_file_path": session_state.get('resume_file_path', ''),
+                "upload_timestamp": session_state.get('upload_timestamp', ''),
+                "analysis_timestamp": datetime.now().isoformat(),
+                "data_source": "streamlit_form"
+            }
+        }
+        
+        # Print combined data for debugging
+        print("\n" + "="*80)
+        print("🔥 DEBUGGING: Combined data being saved to Firestore")
+        print("="*80)
+        print(f"📄 Document ID: {document_id}")
+        
+        # Debug specific fields that might be missing
+        print("\n🔍 DEBUGGING: Key fields check:")
+        print(f"  target_positions: {session_state.get('target_positions', 'NOT FOUND')}")
+        print(f"  preferred_locations: {session_state.get('preferred_locations', 'NOT FOUND')}")
+        print(f"  skills: {session_state.get('skills', 'NOT FOUND')}")
+        print(f"  selected_job_types: {session_state.get('selected_job_types', 'NOT FOUND')}")
+        print(f"  position_select: {session_state.get('position_select', 'NOT FOUND')}")
+        print(f"  location_select: {session_state.get('location_select', 'NOT FOUND')}")
+        print(f"  skill_select: {session_state.get('skill_select', 'NOT FOUND')}")
+        print(f"  job_type_select: {session_state.get('job_type_select', 'NOT FOUND')}")
+        
+        print("\n📊 Combined data structure:")
+        print(json.dumps(combined_data, indent=2, default=str))
+        print("="*80)
+        
+        # Save to Firestore
+        print(f"🔄 Attempting to save to Firestore with document ID: {document_id}")
+        doc_id = save_resume_data(combined_data, f"{document_id}.pdf")
+        
+        if doc_id:
+            print(f"✅ Successfully saved combined data to Firestore with ID: {doc_id}")
+            return doc_id
+        else:
+            print(f"❌ Firestore save returned None - check Firebase configuration")
+            return None
+        
+    except Exception as e:
+        print(f"❌ Failed to save combined data to Firestore: {str(e)}")
+        import traceback
+        print(f"Full error traceback: {traceback.format_exc()}")
+        return None
+
+
 def send_resume_data_to_backend(session_state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     Send resume data to backend and return response.
@@ -294,6 +448,16 @@ def send_resume_data_to_backend(session_state: Dict[str, Any]) -> Optional[Dict[
     Returns:
         Backend response data or None if failed
     """
+    # Print session state data being sent to backend
+    print("\n" + "="*80)
+    print("DEBUGGING: Backend Integration - Data being sent")
+    print("="*80)
+    print("Session state keys and values:")
+    for key, value in session_state.items():
+        if not key.startswith('_'):
+            print(f"  {key}: {type(value).__name__} = {str(value)[:100]}...")
+    print("="*80)
+    
     # Try the new simple webhook client first
     try:
         from utils.n8n_webhook_client import send_dynamic_data_to_n8n

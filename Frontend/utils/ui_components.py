@@ -160,6 +160,121 @@ class CustomCSS:
             .stMarkdownContainer p:after {
                 content: "";
             }
+            
+            /* Sidebar Styling - Multiple selectors for compatibility */
+            .css-1d391kg,
+            .stSidebar,
+            [data-testid="stSidebar"],
+            .css-1cypcdb,
+            .css-1v0mbdj {
+                background: linear-gradient(135deg, #0d0505 0%, #1a0a0a 25%, #2d0d0d 50%, #3d1515 75%, #4d1a1a 100%) !important;
+                border-right: 1px solid rgba(255, 255, 255, 0.1) !important;
+                position: relative;
+                overflow: hidden;
+            }
+            
+            /* Add subtle overlay for depth */
+            .css-1d391kg::before,
+            .stSidebar::before,
+            [data-testid="stSidebar"]::before,
+            .css-1cypcdb::before,
+            .css-1v0mbdj::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+                pointer-events: none;
+                z-index: 1;
+            }
+            
+            /* Ensure sidebar content is above overlay */
+            .stSidebar > * {
+                position: relative;
+                z-index: 2;
+            }
+            
+            /* Additional sidebar targeting for older Streamlit versions */
+            section[data-testid="stSidebar"] {
+                background: linear-gradient(135deg, #0d0505 0%, #1a0a0a 25%, #2d0d0d 50%, #3d1515 75%, #4d1a1a 100%) !important;
+            }
+            
+            /* Force sidebar background with higher specificity */
+            .stApp > div:first-child {
+                background: linear-gradient(135deg, #0d0505 0%, #1a0a0a 25%, #2d0d0d 50%, #3d1515 75%, #4d1a1a 100%) !important;
+            }
+            
+            /* Target sidebar container directly */
+            div[data-testid="stSidebar"] {
+                background: linear-gradient(135deg, #0d0505 0%, #1a0a0a 25%, #2d0d0d 50%, #3d1515 75%, #4d1a1a 100%) !important;
+            }
+            
+            .stSidebar .stButton > button {
+                background: rgba(255, 255, 255, 0.1);
+                color: #ffffff;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 8px;
+                padding: 0.75rem 1rem;
+                font-weight: 500;
+                transition: all 0.2s ease;
+                margin-bottom: 0.5rem;
+            }
+            
+            .stSidebar .stButton > button:hover {
+                background: #007aff;
+                color: white;
+                border-color: #007aff;
+                transform: translateX(4px);
+            }
+            
+            .stSidebar .stButton > button:active {
+                background: #0056b3;
+            }
+            
+            /* Sidebar navigation active state */
+            .stSidebar .stButton > button[aria-pressed="true"] {
+                background: #007aff;
+                color: white;
+                border-color: #007aff;
+            }
+            
+            /* Sidebar content styling */
+            .stSidebar .stMarkdown {
+                color: #ffffff;
+            }
+            
+            .stSidebar .stMarkdown h1,
+            .stSidebar .stMarkdown h2,
+            .stSidebar .stMarkdown h3,
+            .stSidebar .stMarkdown h4,
+            .stSidebar .stMarkdown h5,
+            .stSidebar .stMarkdown h6 {
+                color: #ffffff;
+            }
+            
+            .stSidebar .stSuccess {
+                background: #d4edda;
+                color: #155724;
+                border: 1px solid #c3e6cb;
+                border-radius: 8px;
+                padding: 0.75rem;
+            }
+            
+            .stSidebar .stInfo {
+                background: #d1ecf1;
+                color: #0c5460;
+                border: 1px solid #bee5eb;
+                border-radius: 8px;
+                padding: 0.75rem;
+            }
+            
+            /* Main content area adjustments for sidebar */
+            .main .block-container {
+                padding-top: 2rem;
+                padding-bottom: 2rem;
+            }
         </style>
         <script>
             // Function to make asterisks red

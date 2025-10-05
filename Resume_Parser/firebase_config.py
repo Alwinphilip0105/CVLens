@@ -50,13 +50,37 @@ def initialize_firebase():
 
 def save_resume_data(resume_data, filename):
     """Save resume data to Firestore (JSON only)"""
-    db, bucket = initialize_firebase()
+    print("\n" + "="*80)
+    print("🔥 DEBUGGING: Firestore Save Operation")
+    print("="*80)
+    print(f"📁 Filename: {filename}")
+    print(f"📄 Document ID: {filename.replace('.pdf', '')}")
+    print("📊 Resume data being saved to Firestore:")
+    print(json.dumps(resume_data, indent=2, default=str))
+    print("="*80)
+    
+    try:
+        db, bucket = initialize_firebase()
+        print("✅ Firebase initialized successfully")
 
-    # Save to Firestore
-    doc_ref = db.collection("resumes").document(filename.replace(".pdf", ""))
-    doc_ref.set(resume_data)
+        # Save to Firestore
+        doc_id = filename.replace(".pdf", "")
+        doc_ref = db.collection("resumes").document(doc_id)
+        
+        print(f"🔄 Saving to collection 'resumes' with document ID: {doc_id}")
+        doc_ref.set(resume_data)
+        
+        print(f"✅ Successfully saved to Firestore with ID: {doc_ref.id}")
+        print("="*80)
 
-    return doc_ref.id
+        return doc_ref.id
+        
+    except Exception as e:
+        print(f"❌ Firestore save failed: {str(e)}")
+        import traceback
+        print(f"Full error traceback: {traceback.format_exc()}")
+        print("="*80)
+        return None
 
 def list_firebase_documents():
     """
