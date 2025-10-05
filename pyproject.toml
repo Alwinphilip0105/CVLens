@@ -16,7 +16,6 @@ pypdf = "^3.0.0"
 python-docx = "^0.8.11"
 firebase-admin = "^7.1.0"
 google-auth = "^2.41.1"
-google-auth-oauthlib = "^1.2.2"
 google-auth-httplib2 = "^0.2.0"
 google-api-python-client = "^2.184.0"
 
