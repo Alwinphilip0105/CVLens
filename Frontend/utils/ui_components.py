@@ -328,55 +328,152 @@ class FormComponents:
     
     @staticmethod
     def info_button_with_tooltip():
-        """Display info button with hover tooltip explaining required fields."""
+        """Display info button with hoverable transparent tab effect explaining required fields."""
         st.markdown("""
-        <div style="position: relative; display: inline-block;">
-            <button style="
-                background: #1f77b4;
+        <div style="position: relative; display: inline-block; margin-bottom: 10px;">
+            <button id="infoButton" style="
+                background: rgba(31, 119, 180, 0.8);
                 color: white;
-                border: none;
+                border: 2px solid rgba(255, 255, 255, 0.3);
                 border-radius: 50%;
-                width: 24px;
-                height: 24px;
+                width: 32px;
+                height: 32px;
                 cursor: pointer;
-                font-size: 12px;
+                font-size: 16px;
+                font-weight: bold;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-            " onmouseover="showTooltip()" onmouseout="hideTooltip()" onclick="toggleTooltip()">
-                i
+                transition: all 0.3s ease;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+                backdrop-filter: blur(10px);
+                position: relative;
+                overflow: hidden;
+            " onmouseover="showTooltip()" onmouseout="hideTooltip()">
+                <span style="position: relative; z-index: 2;">i</span>
+                <div id="hoverOverlay" style="
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: linear-gradient(45deg, rgba(255,255,255,0.1), rgba(255,255,255,0.2));
+                    opacity: 0;
+                    transition: opacity 0.3s ease;
+                    border-radius: 50%;
+                "></div>
             </button>
-            <div id="tooltip" style="
+            <div id="infoTooltip" style="
                 position: absolute;
-                background: #2d3748;
+                background: rgba(0, 0, 0, 0.85);
                 color: white;
-                padding: 8px 12px;
-                border-radius: 6px;
-                font-size: 12px;
+                padding: 16px 20px;
+                border-radius: 12px;
+                font-size: 13px;
                 white-space: nowrap;
                 z-index: 1000;
-                top: 30px;
-                left: 0;
+                top: 40px;
+                left: -60px;
                 display: none;
-                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                border: 1px solid #4a5568;
+                box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                backdrop-filter: blur(15px);
+                min-width: 220px;
+                white-space: normal;
+                line-height: 1.5;
+                transform: translateY(-10px);
+                opacity: 0;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             ">
-                Red asterisk (*) indicates required fields that must be filled out before analysis.
+                <div style="
+                    position: absolute;
+                    top: -8px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    width: 0;
+                    height: 0;
+                    border-left: 8px solid transparent;
+                    border-right: 8px solid transparent;
+                    border-bottom: 8px solid rgba(0, 0, 0, 0.85);
+                "></div>
+                <strong style="color: #4CAF50; font-size: 14px;">Required Fields:</strong><br>
+                <div style="margin-top: 8px;">
+                    <div style="display: flex; align-items: center; margin: 4px 0;">
+                        <span style="color: #FF6B6B; margin-right: 8px;">•</span>
+                        <span>Full Name</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin: 4px 0;">
+                        <span style="color: #FF6B6B; margin-right: 8px;">•</span>
+                        <span>Email Address</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin: 4px 0;">
+                        <span style="color: #FF6B6B; margin-right: 8px;">•</span>
+                        <span>Contact Number</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin: 4px 0;">
+                        <span style="color: #FF6B6B; margin-right: 8px;">•</span>
+                        <span>At least one Target Position</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin: 4px 0;">
+                        <span style="color: #FF6B6B; margin-right: 8px;">•</span>
+                        <span>At least one Preferred Location</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin: 4px 0;">
+                        <span style="color: #FF6B6B; margin-right: 8px;">•</span>
+                        <span>At least one Skill</span>
+                    </div>
+                    <div style="display: flex; align-items: center; margin: 4px 0;">
+                        <span style="color: #FF6B6B; margin-right: 8px;">•</span>
+                        <span>At least one Job Type</span>
+                    </div>
+                </div>
             </div>
         </div>
         
         <script>
         function showTooltip() {
-            document.getElementById('tooltip').style.display = 'block';
+            const tooltip = document.getElementById('infoTooltip');
+            const button = document.getElementById('infoButton');
+            const overlay = document.getElementById('hoverOverlay');
+            
+            // Show tooltip with smooth animation
+            tooltip.style.display = 'block';
+            setTimeout(() => {
+                tooltip.style.transform = 'translateY(0)';
+                tooltip.style.opacity = '1';
+            }, 10);
+            
+            // Add hover effects to button
+            button.style.background = 'rgba(31, 119, 180, 0.95)';
+            button.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+            button.style.transform = 'scale(1.1)';
+            button.style.boxShadow = '0 4px 15px rgba(31, 119, 180, 0.4)';
+            
+            // Show overlay effect
+            overlay.style.opacity = '1';
         }
         
         function hideTooltip() {
-            document.getElementById('tooltip').style.display = 'none';
-        }
-        
-        function toggleTooltip() {
-            const tooltip = document.getElementById('tooltip');
-            tooltip.style.display = tooltip.style.display === 'none' ? 'block' : 'none';
+            const tooltip = document.getElementById('infoTooltip');
+            const button = document.getElementById('infoButton');
+            const overlay = document.getElementById('hoverOverlay');
+            
+            // Hide tooltip with smooth animation
+            tooltip.style.transform = 'translateY(-10px)';
+            tooltip.style.opacity = '0';
+            
+            setTimeout(() => {
+                tooltip.style.display = 'none';
+            }, 300);
+            
+            // Reset button effects
+            button.style.background = 'rgba(31, 119, 180, 0.8)';
+            button.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+            button.style.transform = 'scale(1)';
+            button.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+            
+            // Hide overlay effect
+            overlay.style.opacity = '0';
         }
         </script>
         """, unsafe_allow_html=True)
@@ -657,6 +754,110 @@ class DisplayComponents:
                 st.markdown("---")
 
 
+class ReviewSection:
+    """Review section component for the sidebar."""
+    
+    @staticmethod
+    def display_review_section():
+        """Display the review section in the sidebar."""
+        st.markdown("### ⭐ Reviews & Feedback")
+        st.markdown("---")
+        
+        # Sample reviews data
+        reviews = [
+            {
+                "name": "Sarah Chen",
+                "rating": 5,
+                "comment": "CVLens helped me land my dream job! The AI analysis was spot-on.",
+                "role": "Software Engineer"
+            },
+            {
+                "name": "Michael Rodriguez",
+                "rating": 5,
+                "comment": "Amazing platform! Got 3 job offers within a week.",
+                "role": "Data Scientist"
+            },
+            {
+                "name": "Emily Johnson",
+                "rating": 4,
+                "comment": "Great resume tips and job matching. Highly recommended!",
+                "role": "Marketing Manager"
+            },
+            {
+                "name": "David Kim",
+                "rating": 5,
+                "comment": "The personalized recommendations are incredible. Game changer!",
+                "role": "Product Manager"
+            }
+        ]
+        
+        # Display reviews
+        for review in reviews:
+            with st.container():
+                # Review header
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.markdown(f"**{review['name']}**")
+                    st.caption(f"{review['role']}")
+                with col2:
+                    # Star rating
+                    stars = "⭐" * review['rating']
+                    st.markdown(f"<div style='text-align: right; font-size: 14px;'>{stars}</div>", unsafe_allow_html=True)
+                
+                # Review comment
+                st.markdown(f"*\"{review['comment']}\"*")
+                st.markdown("---")
+        
+        # Add review button
+        if st.button("📝 Leave a Review", use_container_width=True, key="leave_review_btn"):
+            st.session_state.show_review_modal = True
+            st.rerun()
+        
+        # Review modal
+        if st.session_state.get('show_review_modal', False):
+            ReviewSection.show_review_modal()
+    
+    @staticmethod
+    def show_review_modal():
+        """Show the review submission modal."""
+        st.markdown("### 📝 Leave Your Review")
+        
+        with st.form("review_form"):
+            # User details
+            col1, col2 = st.columns(2)
+            with col1:
+                reviewer_name = st.text_input("Your Name", placeholder="Enter your name")
+            with col2:
+                reviewer_role = st.text_input("Your Role", placeholder="e.g., Software Engineer")
+            
+            # Rating
+            rating = st.selectbox("Rating", options=[5, 4, 3, 2, 1], format_func=lambda x: "⭐" * x)
+            
+            # Review comment
+            review_comment = st.text_area(
+                "Your Review", 
+                placeholder="Share your experience with CVLens...",
+                height=100
+            )
+            
+            # Submit buttons
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.form_submit_button("Submit Review", type="primary"):
+                    if reviewer_name and review_comment:
+                        # Here you would typically save to a database
+                        st.success("Thank you for your review! 🎉")
+                        st.session_state.show_review_modal = False
+                        st.rerun()
+                    else:
+                        st.error("Please fill in all required fields.")
+            
+            with col2:
+                if st.form_submit_button("Cancel"):
+                    st.session_state.show_review_modal = False
+                    st.rerun()
+
+
 class SessionStateManager:
     """Manages Streamlit session state initialization and updates."""
     
@@ -704,6 +905,9 @@ class SessionStateManager:
         
         if 'extracted_links' not in st.session_state:
             st.session_state.extracted_links = {}
+        
+        if 'show_review_modal' not in st.session_state:
+            st.session_state.show_review_modal = False
     
     @staticmethod
     def update_session_state_from_analysis(analysis_data: dict):

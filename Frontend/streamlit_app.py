@@ -114,7 +114,308 @@ section[data-testid="stSidebar"] {
     background: #007aff !important;
     color: white !important;
 }
+
+/* Job Description Panel Styling - Make expanders black */
+.stExpander {
+    background: #000000 !important;
+    border: 1px solid #333333 !important;
+    border-radius: 8px !important;
+}
+
+/* Target ALL possible expander header selectors */
+.stExpander > div {
+    background: #000000 !important;
+}
+
+.stExpander > div > div {
+    background: #000000 !important;
+}
+
+.stExpander > div > div > div {
+    background: #000000 !important;
+}
+
+.stExpander > div > div > div > div {
+    background: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* Target expander header button and toggle */
+.stExpander button {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+    border: none !important;
+}
+
+.stExpander [data-testid="stExpanderToggle"] {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+.stExpander > div[data-testid="stExpanderToggle"] {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* Target the expander header area specifically */
+.stExpander > div:first-child {
+    background-color: #000000 !important;
+}
+
+.stExpander > div:first-child > div {
+    background-color: #000000 !important;
+}
+
+.stExpander > div:first-child > div > div {
+    background-color: #000000 !important;
+}
+
+/* Target all markdown content in expanders */
+.stExpander .stMarkdown {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+.stExpander .stMarkdown p {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* Target expander content area */
+.stExpander > div > div > div > div > div {
+    background: #2d1a1a !important;
+    color: #ffffff !important;
+}
+
+/* More specific targeting for expander header */
+.stExpander > div[role="button"] {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+.stExpander > div > div[role="button"] {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* Target the expander header text specifically */
+.stExpander h1, .stExpander h2, .stExpander h3, .stExpander h4, .stExpander h5, .stExpander h6 {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* Force black background on all expander elements */
+.stExpander * {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* Target the specific job description expander */
+.stExpander[aria-expanded="true"] {
+    background: #000000 !important;
+}
+
+/* Additional Streamlit-specific selectors */
+.stExpander > div[data-testid="stExpanderToggle"] > div {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+.stExpander > div[data-testid="stExpanderToggle"] > div > div {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* Target the expander header text area */
+.stExpander > div[data-testid="stExpanderToggle"] .stMarkdown {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* Force all expander children to be black */
+.stExpander > div[data-testid="stExpanderToggle"] * {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* Target expander header with more specificity */
+div[data-testid="stExpander"] > div[data-testid="stExpanderToggle"] {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+div[data-testid="stExpander"] > div[data-testid="stExpanderToggle"] > div {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* Override any Streamlit default styling */
+.stExpander > div[data-testid="stExpanderToggle"] {
+    background: #000000 !important;
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* Target the expander header button area */
+.stExpander > div[data-testid="stExpanderToggle"] button {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+    border: none !important;
+}
+
+/* Ensure the expander header is black in all states */
+.stExpander > div[data-testid="stExpanderToggle"]:hover {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+.stExpander > div[data-testid="stExpanderToggle"]:active {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+.stExpander > div[data-testid="stExpanderToggle"]:focus {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+.stExpander[aria-expanded="true"] > div {
+    background: #000000 !important;
+}
+
+/* Nuclear option - target everything with high specificity */
+div[data-testid="stExpander"] {
+    background: #000000 !important;
+}
+
+div[data-testid="stExpander"] > div {
+    background: #000000 !important;
+}
+
+div[data-testid="stExpander"] > div > div {
+    background: #000000 !important;
+}
+
+div[data-testid="stExpander"] > div > div > div {
+    background: #000000 !important;
+}
+
+/* Target the expander header specifically */
+div[data-testid="stExpander"] > div[data-testid="stExpanderToggle"] {
+    background: #000000 !important;
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* Force override any existing styles */
+div[data-testid="stExpander"] > div[data-testid="stExpanderToggle"] * {
+    background: #000000 !important;
+    background-color: #000000 !important;
+    color: #ffffff !important;
+}
+
+/* Target the expander content area */
+div[data-testid="stExpander"] > div[data-testid="stExpanderContent"] {
+    background: #2d1a1a !important;
+    color: #ffffff !important;
+}
+
+div[data-testid="stExpander"] > div[data-testid="stExpanderContent"] * {
+    background: #2d1a1a !important;
+    color: #ffffff !important;
+}
+
+/* Make sure text is visible on black background */
+.stExpander .stMarkdown {
+    color: #ffffff !important;
+}
+
+/* Additional CSS targeting for expander headers */
+.stExpander .stMarkdown p {
+    color: #ffffff !important;
+}
+
+/* Center the Navigation heading */
+.stSidebar .stMarkdown h2 {
+    text-align: center !important;
+    margin-bottom: 0.5rem !important;
+    margin-top: 1rem !important;
+}
+
+/* Style the separator line */
+.stSidebar hr {
+    margin: 0.5rem 0 1rem 0 !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.stExpander .stMarkdown p {
+    color: #ffffff !important;
+}
+
+.stExpander .stMarkdown h1,
+.stExpander .stMarkdown h2,
+.stExpander .stMarkdown h3,
+.stExpander .stMarkdown h4,
+.stExpander .stMarkdown h5,
+.stExpander .stMarkdown h6 {
+    color: #ffffff !important;
+}
 </style>
+""", unsafe_allow_html=True)
+
+# Add JavaScript to force expander styling
+st.markdown("""
+<script>
+// Force expander headers to be black
+function forceExpanderStyling() {
+    // Target all expanders
+    const expanders = document.querySelectorAll('[data-testid="stExpander"]');
+    expanders.forEach(expander => {
+        // Get the toggle element
+        const toggle = expander.querySelector('[data-testid="stExpanderToggle"]');
+        if (toggle) {
+            toggle.style.backgroundColor = '#000000';
+            toggle.style.color = '#ffffff';
+            // Target all children
+            const children = toggle.querySelectorAll('*');
+            children.forEach(child => {
+                child.style.backgroundColor = '#000000';
+                child.style.color = '#ffffff';
+            });
+        }
+        
+        // Target the content area
+        const content = expander.querySelector('[data-testid="stExpanderContent"]');
+        if (content) {
+            content.style.backgroundColor = '#2d1a1a';
+            content.style.color = '#ffffff';
+            const contentChildren = content.querySelectorAll('*');
+            contentChildren.forEach(child => {
+                child.style.backgroundColor = '#2d1a1a';
+                child.style.color = '#ffffff';
+            });
+        }
+    });
+}
+
+// Run immediately
+forceExpanderStyling();
+
+// Run when new content is added
+const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+        if (mutation.addedNodes.length > 0) {
+            setTimeout(forceExpanderStyling, 100);
+        }
+    });
+});
+
+// Start observing
+observer.observe(document.body, {
+    childList: true,
+    subtree: true
+});
+</script>
 """, unsafe_allow_html=True)
 
 # Constants
