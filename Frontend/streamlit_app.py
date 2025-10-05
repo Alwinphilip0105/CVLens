@@ -110,10 +110,8 @@ def profile_analysis_tab():
         st.session_state.debug_mode = False
     
     # Resume processing status
-    if st.session_state.get('gdrive_url'):
-        st.info(f"📁 Resume uploaded to Google Drive: [View]({st.session_state.gdrive_url})")
     if st.session_state.get('firebase_document_id'):
-        st.info(f"🔥 Firebase Document ID: `{st.session_state.firebase_document_id}`")
+        st.info(f"🔥 Resume data saved to Firestore: Document ID `{st.session_state.firebase_document_id}`")
 
     col_resume, col_prefs = st.columns(2)
 
@@ -146,7 +144,7 @@ def profile_analysis_tab():
             
             # Show Resume_Parser status
             if st.session_state.raw_resume_text:
-                st.success("✅ Processed with Resume_Parser (Enhanced PDF parsing)")
+                st.success("✅ Processed with Resume_Parser (Enhanced PDF parsing + Firestore storage)")
         
         with col2:
             st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing
@@ -487,7 +485,7 @@ def job_recommendations_tab():
         col1, col2, col3 = st.columns([1, 2, 1])
         
         with col2:
-            st.info("💡 Your resume has been automatically processed and saved to Google Drive and Firebase!")
+            st.info("💡 Your resume has been automatically processed and saved to Firestore!")
     else:
         st.info("Please run the profile analysis first to see personalized job recommendations.")
         st.markdown("### How it works:")

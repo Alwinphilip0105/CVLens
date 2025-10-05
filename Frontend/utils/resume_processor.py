@@ -23,7 +23,7 @@ if frontend_dir not in sys.path:
 
 def process_resume_with_unicode_handling(pdf_path):
     """
-    Process resume with Google Drive and Firebase, handling Unicode errors.
+    Process resume with Firestore, handling Unicode errors.
     """
     # Ensure Resume_Parser directory is in Python path
     current_file_dir = os.path.dirname(os.path.abspath(__file__))
@@ -36,27 +36,25 @@ def process_resume_with_unicode_handling(pdf_path):
     
     try:
         # Try the normal process
-        from resume_parser import process_resume_with_gdrive_firestore
-        result = process_resume_with_gdrive_firestore(pdf_path)
+        from resume_parser import process_resume_with_firestore
+        result = process_resume_with_firestore(pdf_path)
         return result
     except UnicodeEncodeError as unicode_error:
         print(f"Unicode encoding error in resume_parser logging")
         print(f"This usually means the upload succeeded but logging failed")
         
-        # Check if the upload actually succeeded by looking for recent files
+        # Check if the upload actually succeeded by looking for recent files in Firestore
         try:
-            from gdrive_config import list_gdrive_files
-            recent_files = list_gdrive_files()
+            from firebase_config import list_firebase_documents
+            recent_docs = list_firebase_documents()
             
-            # If we have recent files, the upload likely succeeded
-            if recent_files:
-                print(f"Found {len(recent_files)} files in Google Drive - upload likely succeeded")
+            # If we have recent documents, the upload likely succeeded
+            if recent_docs:
+                print(f"Found {len(recent_docs)} documents in Firestore - upload likely succeeded")
                 # Return a basic success result without re-uploading
                 filename = os.path.basename(pdf_path)
                 return {
                     "filename": filename,
-                    "gdrive_url": f"https://drive.google.com/file/d/{recent_files[0]['id']}/view",
-                    "gdrive_file_id": recent_files[0]['id'],
                     "links": {},
                     "metadata": {"text_content": ""},
                     "document_id": filename.replace('.pdf', ''),
@@ -67,18 +65,12 @@ def process_resume_with_unicode_handling(pdf_path):
         
         # Only upload again if we couldn't verify the first upload succeeded
         try:
-            from gdrive_config import upload_pdf_to_gdrive
             from firebase_config import save_resume_data
             
-            # Upload to Google Drive directly
-            filename = os.path.basename(pdf_path)
-            gdrive_url, gdrive_file_id = upload_pdf_to_gdrive(pdf_path, filename)
-            
             # Create a basic resume data structure
+            filename = os.path.basename(pdf_path)
             resume_data = {
                 "filename": filename,
-                "gdrive_url": gdrive_url,
-                "gdrive_file_id": gdrive_file_id,
                 "links": {},
                 "metadata": {"text_content": ""}
             }
@@ -87,8 +79,7 @@ def process_resume_with_unicode_handling(pdf_path):
             doc_id = save_resume_data(resume_data, filename)
             resume_data["document_id"] = doc_id
             
-            print(f"Successfully recovered: Google Drive upload and Firebase save completed")
-            print(f"Google Drive URL: {gdrive_url}")
+            print(f"Successfully recovered: Firebase save completed")
             print(f"Firebase Document ID: {doc_id}")
             
             return resume_data
@@ -96,22 +87,18 @@ def process_resume_with_unicode_handling(pdf_path):
         except Exception as recovery_error:
             print(f"Recovery failed: {recovery_error}")
             return {
-                "gdrive_url": None,
-                "gdrive_file_id": None,
                 "document_id": None,
                 "links": {},
                 "metadata": {"text_content": ""},
-                "upload_error": f"Unicode error and recovery failed: {recovery_error}"
+                "firebase_error": f"Unicode error and recovery failed: {recovery_error}"
             }
     except Exception as e:
         print(f"Process failed: {e}")
         return {
-            "gdrive_url": None,
-            "gdrive_file_id": None,
             "document_id": None,
             "links": {},
             "metadata": {"text_content": ""},
-            "upload_error": str(e)
+            "firebase_error": str(e)
         }
 
 # Link Classification Patterns (from resume parser)
@@ -446,7 +433,7 @@ def handle_file_upload(uploaded_file) -> None:
                 st.session_state.raw_resume_text = cleaned_text
                 st.session_state.extracted_links = links_data  # Store links in session state
                 
-                # Process resume with Google Drive and Firebase
+                # Process resume with Firestore
                 try:
                     import tempfile
                     import os
@@ -473,8 +460,6 @@ def handle_file_upload(uploaded_file) -> None:
                     os.unlink(temp_file_path)
                     
                     # Update session state with results
-                    if 'gdrive_url' in result:
-                        st.session_state.gdrive_url = result['gdrive_url']
                     if 'document_id' in result:
                         st.session_state.firebase_document_id = result['document_id']
                     if 'links' in result:
@@ -483,22 +468,14 @@ def handle_file_upload(uploaded_file) -> None:
                     if 'metadata' in result and 'text_content' in result['metadata'] and result['metadata']['text_content'].strip():
                         st.session_state.raw_resume_text = result['metadata']['text_content']
                     
-                    # Always show upload status
-                    if 'gdrive_url' in result and result['gdrive_url'] and result['gdrive_url'] != 'None':
-                        st.success("✅ Resume uploaded to Google Drive successfully!")
-                        st.info(f"📁 Google Drive: [View Resume]({result['gdrive_url']})")
-                    else:
-                        st.warning("⚠️ Google Drive upload failed")
-                        if 'upload_error' in result:
-                            st.error(f"Error: {result['upload_error']}")
-                    
+                    # Show upload status
                     if 'document_id' in result and result['document_id'] and result['document_id'] != 'None':
-                        st.success("✅ Resume data saved to Firebase successfully!")
-                        st.info(f"🔥 Firebase Document ID: `{result['document_id']}`")
+                        st.success("✅ Resume data saved to Firestore successfully!")
+                        st.info(f"🔥 Firestore Document ID: `{result['document_id']}`")
                     else:
-                        st.warning("⚠️ Firebase save failed")
-                        if 'upload_error' in result:
-                            st.error(f"Error: {result['upload_error']}")
+                        st.warning("⚠️ Firestore save failed")
+                        if 'firebase_error' in result:
+                            st.error(f"Error: {result['firebase_error']}")
                         
                 except Exception as e:
                     st.warning(f"⚠️ Resume processing failed: {str(e)}")
