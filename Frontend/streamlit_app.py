@@ -8,6 +8,7 @@ import time
 import sys
 import os
 import json
+import re
 
 # Add the Frontend directory to Python path for imports
 frontend_dir = os.path.dirname(os.path.abspath(__file__))
@@ -17,7 +18,7 @@ if frontend_dir not in sys.path:
 # Import our custom modules
 from utils.validation import validate_form_before_analysis
 from utils.resume_processor import handle_file_upload
-from utils.data_models import STANDARD_LOCATIONS, STANDARD_POSITIONS, STANDARD_JOB_TYPES, ALL_STANDARD_PREFERENCES
+from utils.data_models import STANDARD_LOCATIONS, STANDARD_POSITIONS, STANDARD_JOB_TYPES, STANDARD_JOB_LEVELS, ALL_STANDARD_PREFERENCES
 from utils.backend_integration import send_resume_data_to_backend, analyze_resume_logic, generate_job_recommendations, print_ui_data_to_terminal, save_combined_data_to_firestore, test_firestore_connection
 from utils.ui_components import (
     LoadingOverlay, CustomCSS, FormComponents, MultiselectWithCustom, 
@@ -40,6 +41,11 @@ def update_job_types():
     """Update job types in session state."""
     if 'job_type_select' in st.session_state:
         st.session_state.selected_job_types = st.session_state.job_type_select
+
+def update_job_level():
+    """Update job level in session state."""
+    if 'job_level_select' in st.session_state:
+        st.session_state.selected_job_level = st.session_state.job_level_select[0] if st.session_state.job_level_select else ""
 
 def update_skills():
     """Update skills in session state."""
@@ -308,6 +314,22 @@ def profile_analysis_page():
         if 'job_type_select' in st.session_state:
             st.session_state.selected_job_types = st.session_state.job_type_select
 
+        # Job Level Single Select (styled like other fields)
+        st.markdown("**📊 Job Level**")
+        selected_job_level = st.multiselect(
+            "Select your experience level:",
+            options=STANDARD_JOB_LEVELS,
+            default=[st.session_state.selected_job_level] if st.session_state.selected_job_level else [],
+            key='job_level_select',
+            help="Select your current or target experience level",
+            on_change=update_job_level,
+            max_selections=1
+        )
+        
+        # Update session state if changed (convert list to string for single selection)
+        if 'job_level_select' in st.session_state:
+            st.session_state.selected_job_level = st.session_state.job_level_select[0] if st.session_state.job_level_select else ""
+
         # Skills Multi-Select
         st.markdown("**🛠️ Skills**")
         
@@ -395,6 +417,9 @@ def profile_analysis_page():
             
             if 'job_type_select' in st.session_state:
                 st.session_state.selected_job_types = st.session_state.job_type_select
+            
+            if 'job_level_select' in st.session_state:
+                st.session_state.selected_job_level = st.session_state.job_level_select[0] if st.session_state.job_level_select else ""
             
             # Test Firestore connection first
             if not test_firestore_connection():
@@ -556,12 +581,200 @@ def job_recommendations_page():
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-def resume_tips_page():
-    """Resume Tips page with sidebar navigation."""
-    st.markdown('<div class="feature-card">', unsafe_allow_html=True)
-    st.markdown('<h3>✨ Resume Tips & Improvement Guide</h3>', unsafe_allow_html=True)
+def extract_resume_tips_from_webhook(webhook_data):
+    """Extract resume tips from the 0th object of webhook response."""
+    try:
+        if isinstance(webhook_data, list) and len(webhook_data) > 0:
+            # Handle array format - get 0th element
+            first_element = webhook_data[0]
+            if isinstance(first_element, dict) and 'text' in first_element:
+                return first_element['text']
+            return first_element
+        elif isinstance(webhook_data, dict):
+            # Check if data is in 'data' key
+            if 'data' in webhook_data and isinstance(webhook_data['data'], list) and len(webhook_data['data']) > 0:
+                first_element = webhook_data['data'][0]
+                if isinstance(first_element, dict) and 'text' in first_element:
+                    return first_element['text']
+                return first_element
+            # Check if tips are in a specific key
+            elif 'resume_tips' in webhook_data:
+                return webhook_data['resume_tips']
+            # Check if tips are in 'tips' key
+            elif 'tips' in webhook_data:
+                return webhook_data['tips']
+        
+        return None
+    except Exception as e:
+        print(f"Error extracting resume tips: {e}")
+        return None
+
+
+def parse_tips_text(tips_text):
+    """Parse tips text to extract headings and bullet points."""
+    if not tips_text:
+        return []
     
-    # Resume Tips Content
+    # Split by lines and process
+    lines = tips_text.strip().split('\n')
+    parsed_tips = []
+    current_section = None
+    intro_text = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+            
+        # Check if it's a main heading (numbered sections like "1. **Formatting & Layout**")
+        if re.match(r'^\d+\.\s*\*\*.*\*\*', line):
+            # Save previous section if exists
+            if current_section:
+                parsed_tips.append(current_section)
+            
+            # Start new section
+            heading = re.sub(r'^\d+\.\s*\*\*(.*)\*\*.*', r'\1', line).strip()
+            current_section = {
+                'heading': heading,
+                'content': [],
+                'bullets': []
+            }
+        
+        # Check if it's a subheading (like "**Readability:**")
+        elif line.startswith('**') and line.endswith('**') and ':' in line:
+            if current_section:
+                current_section['content'].append(line)
+        
+        # Check if it's a bullet point (starts with * or -)
+        elif line.startswith(('*', '-')) and not line.startswith('**'):
+            bullet_text = line.lstrip('*- ').strip()
+            if current_section:
+                current_section['bullets'].append(bullet_text)
+            else:
+                # If no current section, add to intro text
+                intro_text.append(line)
+        
+        # Check if it's a sub-bullet point (indented)
+        elif line.startswith(('  *', '  -', '    *', '    -')):
+            bullet_text = line.lstrip(' *-').strip()
+            if current_section:
+                current_section['bullets'].append(f"  • {bullet_text}")
+            else:
+                # If no current section, add to intro text
+                intro_text.append(line)
+        
+        # Regular content
+        else:
+            if current_section:
+                current_section['content'].append(line)
+            else:
+                # If no current section, add to intro text
+                intro_text.append(line)
+    
+    # Add the last section
+    if current_section:
+        parsed_tips.append(current_section)
+    
+    # Add intro text as a special section
+    if intro_text:
+        parsed_tips.insert(0, {
+            'heading': 'Introduction',
+            'content': intro_text,
+            'bullets': [],
+            'is_intro': True
+        })
+    
+    return parsed_tips
+
+
+def display_formatted_resume_tips(tips_data):
+    """Display formatted resume tips with proper UI components."""
+    if isinstance(tips_data, str):
+        # Parse the text format
+        parsed_tips = parse_tips_text(tips_data)
+    elif isinstance(tips_data, dict):
+        # Handle structured data
+        parsed_tips = [tips_data]
+    elif isinstance(tips_data, list):
+        # Handle list of tips
+        parsed_tips = tips_data
+    else:
+        st.error("Unable to parse tips data format.")
+        return
+    
+    if not parsed_tips:
+        st.warning("No tips data found to display.")
+        return
+    
+    # Display each tip section
+    for i, tip_section in enumerate(parsed_tips, 1):
+        if isinstance(tip_section, dict):
+            heading = tip_section.get('heading', f'Tip {i}')
+            content = tip_section.get('content', [])
+            bullets = tip_section.get('bullets', [])
+            is_intro = tip_section.get('is_intro', False)
+            
+            # Handle introduction text differently (no expandable section)
+            if is_intro:
+                st.markdown("### 📋 Resume Analysis Overview")
+                for paragraph in content:
+                    if paragraph.strip():
+                        st.markdown(paragraph)
+                st.markdown("---")
+            else:
+                # Create expandable section with emoji based on heading
+                emoji = get_section_emoji(heading)
+                with st.expander(f"{emoji} **{i-1}. {heading}**", expanded=(i == 2)):  # First numbered section expanded
+                    # Display content paragraphs
+                    if content:
+                        for paragraph in content:
+                            if paragraph.strip():
+                                # Handle subheadings with bold formatting
+                                if paragraph.startswith('**') and paragraph.endswith('**'):
+                                    st.markdown(paragraph)
+                                else:
+                                    st.markdown(paragraph)
+                    
+                    # Display bullet points with proper formatting
+                    if bullets:
+                        for bullet in bullets:
+                            if bullet.strip():
+                                # Handle indented bullets
+                                if bullet.startswith('  •'):
+                                    st.markdown(f"  {bullet}")
+                                else:
+                                    st.markdown(f"• {bullet}")
+        else:
+            # Handle simple string tips
+            st.markdown(f"**{i}.** {tip_section}")
+
+
+def get_section_emoji(heading):
+    """Get appropriate emoji based on section heading."""
+    heading_lower = heading.lower()
+    
+    if 'formatting' in heading_lower or 'layout' in heading_lower:
+        return "📝"
+    elif 'clarity' in heading_lower or 'conciseness' in heading_lower:
+        return "✨"
+    elif 'experience' in heading_lower or 'professional' in heading_lower:
+        return "💼"
+    elif 'skills' in heading_lower or 'technical' in heading_lower:
+        return "🛠️"
+    elif 'education' in heading_lower or 'certification' in heading_lower:
+        return "🎓"
+    elif 'achievement' in heading_lower or 'project' in heading_lower:
+        return "🏆"
+    elif 'impression' in heading_lower or 'strength' in heading_lower:
+        return "⭐"
+    elif 'improvement' in heading_lower:
+        return "🚀"
+    else:
+        return "📋"
+
+
+def display_default_resume_tips():
+    """Display default resume tips when no personalized data is available."""
     st.markdown("### 🎯 Essential Resume Tips")
     
     # Tip 1: Formatting
@@ -689,6 +902,34 @@ def resume_tips_page():
                 st.rerun()
     else:
         st.info("Please upload and analyze your resume first to access the editing features.")
+    
+    # Close the feature card
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+def resume_tips_page():
+    """Resume Tips page with sidebar navigation."""
+    st.markdown('<div class="feature-card">', unsafe_allow_html=True)
+    st.markdown('<h3>✨ Resume Tips & Improvement Guide</h3>', unsafe_allow_html=True)
+    
+    # Check if we have webhook response data
+    if st.session_state.get('backend_data'):
+        # Extract resume tips from 0th object of webhook response
+        tips_data = extract_resume_tips_from_webhook(st.session_state.backend_data)
+        
+        if tips_data:
+            st.markdown("### 🎯 Personalized Resume Tips")
+            st.info("💡 These tips are generated based on your specific resume and profile analysis.")
+            st.markdown("---")
+            
+            # Display the formatted tips
+            display_formatted_resume_tips(tips_data)
+        else:
+            st.warning("⚠️ No personalized tips available. Please run profile analysis first.")
+            display_default_resume_tips()
+    else:
+        st.info("📝 Upload and analyze your resume to get personalized improvement suggestions.")
+        display_default_resume_tips()
     
     # Close the feature card
     st.markdown('</div>', unsafe_allow_html=True)

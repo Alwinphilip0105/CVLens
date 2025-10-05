@@ -195,6 +195,7 @@ def send_dynamic_data_to_n8n(session_state: Dict[str, Any]) -> Optional[Dict[str
         "target_positions": get_form_data('target_positions', 'position_select'),
         "skills": get_form_data('skills', 'skill_select'),
         "selected_job_types": get_form_data('selected_job_types', 'job_type_select'),
+        "selected_job_level": session_state.get('selected_job_level', ''),
         # Add additional fields that might be missing
 
         "resume_file_name": session_state.get('resume_file_name', ''),

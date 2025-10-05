@@ -31,6 +31,7 @@ class JobPreferences:
     preferred_locations: List[str] = None
     target_positions: List[str] = None
     job_types: List[str] = None
+    job_level: str = ""
     preferences: List[str] = None
     
     def __post_init__(self):
@@ -89,6 +90,7 @@ class AnalysisRequest:
             "email": self.personal_details.email,
             "target_positions": self.job_preferences.target_positions,
             "job_types": self.job_preferences.job_types,
+            "job_level": self.job_preferences.job_level,
             "preferences": self.job_preferences.preferences,
             "preferred_locations": self.job_preferences.preferred_locations,
             "timestamp": self.timestamp,
@@ -198,6 +200,7 @@ class DataConverter:
             preferred_locations=session_state.get('preferred_locations', []),
             target_positions=session_state.get('selected_positions', []),
             job_types=session_state.get('selected_job_types', []),
+            job_level=session_state.get('selected_job_level', ''),
             preferences=session_state.get('selected_preferences', [])
         )
         
@@ -232,6 +235,7 @@ class DataConverter:
             preferred_locations=session_state.get('preferred_locations', []),
             target_positions=session_state.get('selected_positions', []),
             job_types=session_state.get('selected_job_types', []),
+            job_level=session_state.get('selected_job_level', ''),
             preferences=session_state.get('selected_preferences', [])
         )
         
@@ -279,6 +283,10 @@ STANDARD_POSITIONS = [
 
 STANDARD_JOB_TYPES = [
     "Full Time", "Part Time", "Internship", "Contract"
+]
+
+STANDARD_JOB_LEVELS = [
+    "Entry Level", "Mid Level", "Senior Level"
 ]
 
 ALL_STANDARD_PREFERENCES = [

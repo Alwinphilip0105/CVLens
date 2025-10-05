@@ -684,6 +684,9 @@ class SessionStateManager:
         if 'selected_job_types' not in st.session_state:
             st.session_state.selected_job_types = []
         
+        if 'selected_job_level' not in st.session_state:
+            st.session_state.selected_job_level = ""
+        
         if 'skills' not in st.session_state:
             st.session_state.skills = []
         

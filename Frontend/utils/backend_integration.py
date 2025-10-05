@@ -385,7 +385,8 @@ def save_combined_data_to_firestore(session_state: Dict[str, Any]) -> Optional[D
                 "preferred_locations": get_form_data('preferred_locations', 'location_select'),
                 "target_positions": get_form_data('target_positions', 'position_select'),
                 "skills": get_form_data('skills', 'skill_select'),
-                "selected_job_types": get_form_data('selected_job_types', 'job_type_select')
+                "selected_job_types": get_form_data('selected_job_types', 'job_type_select'),
+                "selected_job_level": session_state.get('selected_job_level', '')
             },
             
             # Metadata
