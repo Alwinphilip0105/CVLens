@@ -19,7 +19,7 @@ if frontend_dir not in sys.path:
 from utils.validation import validate_form_before_analysis
 from utils.resume_processor import handle_file_upload
 from utils.data_models import STANDARD_LOCATIONS, STANDARD_POSITIONS, STANDARD_JOB_TYPES, STANDARD_JOB_LEVELS, ALL_STANDARD_PREFERENCES
-from utils.backend_integration import send_resume_data_to_backend, analyze_resume_logic, generate_job_recommendations, print_ui_data_to_terminal, save_combined_data_to_firestore, test_firestore_connection
+from utils.backend_integration import send_resume_data_to_backend, analyze_resume_logic, print_ui_data_to_terminal, save_combined_data_to_firestore, test_firestore_connection
 from utils.ui_components import (
     LoadingOverlay, CustomCSS, FormComponents, MultiselectWithCustom, 
     DisplayComponents, SessionStateManager
@@ -479,7 +479,113 @@ def profile_analysis_page():
         finally:
             # Clear loading state
             st.session_state.is_analyzing = False
+            # Switch to job recommendations page after analysis completion
+            st.session_state.current_page = "jobs"
             st.rerun()
+
+
+def extract_job_recommendations_from_webhook(webhook_data):
+    """Extract job recommendations from elements 1 onwards of webhook response."""
+    try:
+        if isinstance(webhook_data, list) and len(webhook_data) > 1:
+            # Return elements from index 1 onwards (skip 0th element which is resume tips)
+            return webhook_data[1:]
+        elif isinstance(webhook_data, dict):
+            # Check if data is in 'data' key
+            if 'data' in webhook_data and isinstance(webhook_data['data'], list) and len(webhook_data['data']) > 1:
+                return webhook_data['data'][1:]
+            # Check if job recommendations are in a specific key
+            elif 'job_recommendations' in webhook_data:
+                return webhook_data['job_recommendations']
+            # Check if job recommendations are in 'jobs' key
+            elif 'jobs' in webhook_data:
+                return webhook_data['jobs']
+        
+        return []
+    except Exception as e:
+        print(f"Error extracting job recommendations: {e}")
+        return []
+
+
+def display_webhook_job_recommendations(job_data_list):
+    """Display job recommendations from webhook data in a nice format."""
+    if not job_data_list:
+        st.warning("No job recommendations found in webhook response.")
+        return
+    
+    st.markdown("### 🎯 AI-Generated Job Recommendations")
+    st.info("💡 These recommendations are generated based on your resume analysis and preferences.")
+    st.markdown("---")
+    
+    for i, job_data in enumerate(job_data_list, 1):
+        # Create a job card
+        with st.container():
+            st.markdown(f"#### 💼 **{i}. {job_data.get('title', 'Job Title Not Available')}**")
+            
+            # Company and location
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.markdown(f"**🏢 Company:** {job_data.get('company', 'Company Not Specified')}")
+            with col2:
+                st.markdown(f"**📍 Location:** {job_data.get('location', 'Location Not Specified')}")
+            
+            # Salary and match score
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                salary = job_data.get('salary_range', job_data.get('salary', 'Salary Not Specified'))
+                st.markdown(f"**💰 Salary:** {salary}")
+            with col2:
+                # Calculate match score from job score (0-1) to percentage (0-100)
+                job_score = job_data.get('job_score', job_data.get('score', None))
+                match_score = job_data.get('match_score', job_data.get('match', None))
+                
+                if job_score is not None and isinstance(job_score, (int, float)):
+                    # Convert 0-1 score to 0-100 percentage and round to 2 decimal places
+                    match_percentage = round(float(job_score) * 100, 2)
+                    st.markdown(f"**🎯 Match:** {match_percentage}%")
+                elif match_score is not None and isinstance(match_score, (int, float)):
+                    # If match_score is already a percentage, use it directly
+                    if 0 <= match_score <= 1:
+                        # If it's between 0-1, convert to percentage and round to 2 decimal places
+                        match_percentage = round(float(match_score) * 100, 2)
+                        st.markdown(f"**🎯 Match:** {match_percentage}%")
+                    else:
+                        # If it's already a percentage, round to 2 decimal places
+                        match_percentage = round(float(match_score), 2)
+                        st.markdown(f"**🎯 Match:** {match_percentage}%")
+                else:
+                    st.markdown("**🎯 Match:** N/A")
+            
+            # Job description if available
+            if 'description' in job_data and job_data['description']:
+                with st.expander("📝 **Job Description**", expanded=False):
+                    st.markdown(job_data['description'])
+            
+            # Requirements if available
+            if 'requirements' in job_data and job_data['requirements']:
+                with st.expander("📋 **Requirements**", expanded=False):
+                    if isinstance(job_data['requirements'], list):
+                        for req in job_data['requirements']:
+                            st.markdown(f"• {req}")
+                    else:
+                        st.markdown(job_data['requirements'])
+            
+            # Skills if available
+            if 'skills' in job_data and job_data['skills']:
+                with st.expander("🛠️ **Required Skills**", expanded=False):
+                    if isinstance(job_data['skills'], list):
+                        for skill in job_data['skills']:
+                            st.markdown(f"• {skill}")
+                    else:
+                        st.markdown(job_data['skills'])
+            
+            # Apply button
+            if 'url' in job_data and job_data['url']:
+                st.markdown(f"[🔗 Apply Now]({job_data['url']})")
+            elif 'link' in job_data and job_data['link']:
+                st.markdown(f"[🔗 Apply Now]({job_data['link']})")
+            
+            st.markdown("---")
 
 
 def display_webhook_response():
@@ -537,30 +643,23 @@ def job_recommendations_page():
         # Analysis Results section removed - only process final edited data
         st.success("✅ Profile analysis completed! Job recommendations generated below.")
         
-        # Display webhook response if available
+        # Check if we have webhook response data
         if st.session_state.get('backend_data'):
-            display_webhook_response()
-            st.markdown("---")
-        
-        # Hide extracted links display
-        # if st.session_state.get('extracted_links'):
-        #     DisplayComponents.display_extracted_links(st.session_state.extracted_links)
-        
-        # Generate job recommendations
-        job_recommendations = generate_job_recommendations(
-            resume_text=st.session_state.raw_resume_text,
-            target_positions=st.session_state.target_positions,
-            preferences=st.session_state.skills,
-            locations=st.session_state.preferred_locations
-        )
-        
-        # Data was already printed to terminal after analysis completion
-        
-        # Convert to dict format for display
-        job_recommendations_dict = [job.to_dict() for job in job_recommendations]
-        
-        # Display the recommendations
-        DisplayComponents.display_job_recommendations(job_recommendations_dict)
+            # Extract job recommendations from elements 1 onwards (skip 0th which is resume tips)
+            job_recommendations_data = extract_job_recommendations_from_webhook(st.session_state.backend_data)
+            
+            if job_recommendations_data:
+                # Display job recommendations from webhook
+                display_webhook_job_recommendations(job_recommendations_data)
+            else:
+                # Check if we have any data at all (even if just resume tips)
+                webhook_data = st.session_state.backend_data
+                if isinstance(webhook_data, list) and len(webhook_data) == 1:
+                    display_no_job_recommendations_message("resume_tips_only")
+                else:
+                    display_no_job_recommendations_message("no_data")
+        else:
+            display_no_job_recommendations_message("no_webhook")
         
         # Save to cloud button
         st.markdown("---")
@@ -579,6 +678,45 @@ def job_recommendations_page():
     
     # Close the feature card
     st.markdown('</div>', unsafe_allow_html=True)
+
+
+def display_no_job_recommendations_message(scenario):
+    """Display appropriate message when no job recommendations are available."""
+    st.markdown("### 🎯 Job Recommendations")
+    
+    if scenario == "resume_tips_only":
+        st.info("ℹ️ **No job recommendations found in the analysis response.**")
+        st.markdown("The AI analysis focused on resume improvement suggestions but didn't generate specific job recommendations.")
+        
+        st.markdown("**This could happen if:**")
+        st.markdown("• Your profile needs more specific targeting for job matching")
+        st.markdown("• The job recommendation service needs additional criteria")
+        st.markdown("• The analysis prioritized resume improvement over job matching")
+        
+    elif scenario == "no_data":
+        st.warning("⚠️ **No job recommendations found in the webhook response.**")
+        st.markdown("The analysis completed but didn't return any job recommendation data.")
+        
+    elif scenario == "no_webhook":
+        st.warning("⚠️ **No analysis data available.**")
+        st.markdown("Please run the profile analysis first to get personalized job recommendations.")
+    
+    st.markdown("---")
+    
+    # Suggestions for improvement
+    st.markdown("### 💡 **How to get job recommendations:**")
+    st.markdown("1. **Complete your profile** with detailed skills and preferences")
+    st.markdown("2. **Specify your target positions** and job levels")
+    st.markdown("3. **Add your preferred locations** for better matching")
+    st.markdown("4. **Re-run the analysis** to get updated recommendations")
+    
+    # Try again button
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("🔄 **Try Analysis Again**", use_container_width=True):
+            st.session_state.current_page = "profile"
+            st.rerun()
 
 
 def extract_resume_tips_from_webhook(webhook_data):
@@ -632,8 +770,36 @@ def parse_tips_text(tips_text):
             if current_section:
                 parsed_tips.append(current_section)
             
-            # Start new section
+            # Start new section - extract heading without ** markers
             heading = re.sub(r'^\d+\.\s*\*\*(.*)\*\*.*', r'\1', line).strip()
+            current_section = {
+                'heading': heading,
+                'content': [],
+                'bullets': []
+            }
+        
+        # Check if it's a main heading without ** markers (like "1. Formatting & Layout:")
+        elif re.match(r'^\d+\.\s+[A-Za-z].*:', line):
+            # Save previous section if exists
+            if current_section:
+                parsed_tips.append(current_section)
+            
+            # Start new section - extract heading
+            heading = re.sub(r'^\d+\.\s+(.*):.*', r'\1', line).strip()
+            current_section = {
+                'heading': heading,
+                'content': [],
+                'bullets': []
+            }
+        
+        # Check if it's a main heading with emoji (like "📋 1. Refine Summary:")
+        elif re.match(r'^[📝✨💼🛠️🎓🏆⭐🚀📋]+\s+\d+\.\s+[A-Za-z].*:', line):
+            # Save previous section if exists
+            if current_section:
+                parsed_tips.append(current_section)
+            
+            # Start new section - extract heading (remove emoji and number)
+            heading = re.sub(r'^[📝✨💼🛠️🎓🏆⭐🚀📋]+\s+\d+\.\s+(.*):.*', r'\1', line).strip()
             current_section = {
                 'heading': heading,
                 'content': [],
@@ -643,7 +809,9 @@ def parse_tips_text(tips_text):
         # Check if it's a subheading (like "**Readability:**")
         elif line.startswith('**') and line.endswith('**') and ':' in line:
             if current_section:
-                current_section['content'].append(line)
+                # Remove ** markers completely
+                clean_text = line.replace('**', '').strip()
+                current_section['content'].append(clean_text)
         
         # Check if it's a bullet point (starts with * or -)
         elif line.startswith(('*', '-')) and not line.startswith('**'):
@@ -729,24 +897,31 @@ def display_formatted_resume_tips(tips_data):
                     if content:
                         for paragraph in content:
                             if paragraph.strip():
-                                # Handle subheadings with bold formatting
-                                if paragraph.startswith('**') and paragraph.endswith('**'):
-                                    st.markdown(paragraph)
-                                else:
-                                    st.markdown(paragraph)
+                                # Process bold text formatting
+                                processed_paragraph = process_bold_text(paragraph)
+                                st.markdown(processed_paragraph)
                     
                     # Display bullet points with proper formatting
                     if bullets:
                         for bullet in bullets:
                             if bullet.strip():
+                                # Process bold text formatting
+                                processed_bullet = process_bold_text(bullet)
                                 # Handle indented bullets
                                 if bullet.startswith('  •'):
-                                    st.markdown(f"  {bullet}")
+                                    st.markdown(f"  {processed_bullet}")
                                 else:
-                                    st.markdown(f"• {bullet}")
+                                    st.markdown(f"• {processed_bullet}")
         else:
             # Handle simple string tips
             st.markdown(f"**{i}.** {tip_section}")
+
+
+def process_bold_text(text):
+    """Process text to remove all ** markers."""
+    # Remove all ** markers from the text
+    clean_text = text.replace('**', '')
+    return clean_text
 
 
 def get_section_emoji(heading):
