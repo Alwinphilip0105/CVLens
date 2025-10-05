@@ -18,7 +18,7 @@ def show_webhook_response_format():
     print("=================================================================================")
     print("🚀 WEBHOOK REQUEST TO n8n")
     print("=================================================================================")
-    print("📍 URL: https://ruhack.app.n8n.cloud/webhook/getdata")
+    print("📍 URL: https://ruhack.app.n8n.cloud/webhook-test/getdata")
     print("📦 Payload:")
     print(json.dumps({
         "resume_text": "John Doe\\nSoftware Engineer\\n5 years experience...",

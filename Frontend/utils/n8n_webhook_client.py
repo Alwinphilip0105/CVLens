@@ -12,7 +12,7 @@ import streamlit as st
 class N8NWebhookClient:
     """Client for communicating with n8n webhook endpoints."""
     
-    def __init__(self, webhook_url: str = "https://ruhack.app.n8n.cloud/webhook/getdata"):
+    def __init__(self, webhook_url: str = "https://ruhack.app.n8n.cloud/webhook-test/getdata"):
         """
         Initialize the n8n webhook client.
         
