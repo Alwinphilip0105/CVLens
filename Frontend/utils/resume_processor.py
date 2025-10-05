@@ -13,6 +13,9 @@ import re
 import json
 import sys
 import os
+from datetime import datetime
+import hashlib
+import tempfile # Added for explicit temp file handling
 
 # Add the Frontend directory to Python path for imports
 # Get the directory containing this file (utils), then go up one level (Frontend)
@@ -24,6 +27,9 @@ if frontend_dir not in sys.path:
 def process_resume_with_unicode_handling(pdf_path):
     """
     Process resume with Firestore, handling Unicode errors.
+    
+    The document ID used for Firestore is derived from the basename of pdf_path, 
+    minus the extension.
     """
     # Ensure Resume_Parser directory is in Python path
     current_file_dir = os.path.dirname(os.path.abspath(__file__))
@@ -51,13 +57,17 @@ def process_resume_with_unicode_handling(pdf_path):
             # If we have recent documents, the upload likely succeeded
             if recent_docs:
                 print(f"Found {len(recent_docs)} documents in Firestore - upload likely succeeded")
-                # Return a basic success result without re-uploading
+                
+                # Derive Document ID from the path (which includes the timestamp)
                 filename = os.path.basename(pdf_path)
+                doc_id = os.path.splitext(filename)[0]
+
+                # Return a basic success result without re-uploading
                 return {
                     "filename": filename,
                     "links": {},
                     "metadata": {"text_content": ""},
-                    "document_id": filename.replace('.pdf', ''),
+                    "document_id": doc_id,
                     "recovered_from_unicode_error": True
                 }
         except Exception as check_error:
@@ -69,14 +79,22 @@ def process_resume_with_unicode_handling(pdf_path):
             
             # Create a basic resume data structure
             filename = os.path.basename(pdf_path)
+            doc_id_fallback = os.path.splitext(filename)[0]
+
             resume_data = {
                 "filename": filename,
                 "links": {},
                 "metadata": {"text_content": ""}
             }
             
-            # Save to Firebase
+            # Save to Firebase. Assuming the backend uses the filename to derive the ID
+            # if a specific doc_id is not passed.
             doc_id = save_resume_data(resume_data, filename)
+            
+            # Fallback for doc_id if the save function doesn't return it
+            if doc_id is None:
+                doc_id = doc_id_fallback
+
             resume_data["document_id"] = doc_id
             
             print(f"Successfully recovered: Firebase save completed")
@@ -332,18 +350,6 @@ class ResumeProcessor:
                 return False, "", {}
             
             if text:
-                # Hide extraction success message and links display
-                # st.success(f"Successfully extracted text from {uploaded_file.name}")
-                # Show extracted links if any
-                # if links_data and any(links_data.values()):
-                #     st.info("🔗 Extracted links from resume:")
-                #     for category, data in links_data.items():
-                #         if isinstance(data, dict):
-                #             for subcategory, urls in data.items():
-                #                 if urls:
-                #                     st.write(f"  {category.title()} {subcategory}: {', '.join(urls)}")
-                #         elif data:
-                #             st.write(f"  {category.title()}: {', '.join(data)}")
                 return True, text, links_data
             else:
                 st.warning(f"No text could be extracted from {uploaded_file.name}")
@@ -435,29 +441,46 @@ def handle_file_upload(uploaded_file) -> None:
                 
                 # Process resume with Firestore
                 try:
-                    import tempfile
-                    import os
-                    import subprocess
-                    import sys
+                    # --- NEW LOGIC FOR TIMESTAMPED FILENAME/DOCUMENT ID ---
                     
-                    # Create temporary file for processing
-                    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-                        # Reset file pointer to beginning
-                        uploaded_file.seek(0)
-                        file_content = uploaded_file.read()
+                    # 1. Generate unique, timestamped document ID prefix
+                    now = datetime.now()
+                    timestamp_str = now.strftime("%Y%m%d_%H%M%S")
+                    
+                    # Safely extract and sanitize original name
+                    original_name_parts = uploaded_file.name.rsplit('.', 1)
+                    original_name = original_name_parts[0]
+                    file_extension = original_name_parts[-1].lower() if len(original_name_parts) > 1 else 'pdf' # Fallback
+                    
+                    # Sanitize name by replacing non-word/non-hyphen characters with underscores
+                    safe_original_name = re.sub(r'[^\w-]', '_', original_name)
+
+                    # The unique name that will be used as the Firestore Document ID
+                    document_id_prefix = f"{safe_original_name}_{timestamp_str}"
+                    
+                    # Create the temporary file path using the desired document ID
+                    temp_file_path = os.path.join(tempfile.gettempdir(), f"{document_id_prefix}.{file_extension}")
+                    
+                    # 2. Write file content to the temp path
+                    uploaded_file.seek(0)
+                    file_content = uploaded_file.read()
+
+                    if len(file_content) == 0:
+                        st.error("❌ Uploaded file is empty!")
+                        return
+
+                    # Write file content to the specified temporary path
+                    with open(temp_file_path, 'wb') as temp_file:
                         temp_file.write(file_content)
-                        temp_file_path = temp_file.name
-                        
-                        # Verify file was written correctly
-                        if len(file_content) == 0:
-                            st.error("❌ Uploaded file is empty!")
-                            return
-                    
-                    # Run resume processing in a subprocess to handle Unicode issues
+
+                    # --- END NEW LOGIC ---
+
+                    # Run resume processing (uses temp_file_path which now contains the desired ID)
                     result = process_resume_with_unicode_handling(temp_file_path)
                     
                     # Clean up temporary file
-                    os.unlink(temp_file_path)
+                    if os.path.exists(temp_file_path):
+                        os.unlink(temp_file_path)
                     
                     # Update session state with results
                     if 'document_id' in result:
@@ -497,12 +520,8 @@ def handle_file_upload(uploaded_file) -> None:
                     # Update session state with extracted details
                     SessionStateManager.update_session_state_from_analysis(analysis_data)
                     
-                    # Hide personal details extraction message
-                    # st.info("🔍 Personal details extracted from resume!")
-                    
                 except Exception as e:
                     # Hide warning message
-                    # st.warning(f"⚠️ Could not extract personal details: {e}")
                     pass
                     
             else:
