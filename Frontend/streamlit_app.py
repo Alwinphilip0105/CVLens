@@ -57,9 +57,22 @@ st.set_page_config(
 CustomCSS.apply_custom_styles()
 
 
-# Additional sidebar gradient CSS for better compatibility
+# Additional background and sidebar CSS
 st.markdown("""
 <style>
+/* Main app background with more red block gradient */
+.stApp {
+    background: #1a0000 !important;
+    background-image: 
+        linear-gradient(45deg, #ff0000 25%, transparent 25%),
+        linear-gradient(-45deg, #ff0000 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #cc0000 75%),
+        linear-gradient(-45deg, transparent 75%, #cc0000 75%);
+    background-size: 60px 60px;
+    background-position: 0 0, 0 30px, 30px -30px, -30px 0px;
+    background-attachment: fixed;
+}
+
 /* Force sidebar gradient with maximum specificity */
 section[data-testid="stSidebar"] {
     background: linear-gradient(135deg, #0d0505 0%, #1a0a0a 25%, #2d0d0d 50%, #3d1515 75%, #4d1a1a 100%) !important;
