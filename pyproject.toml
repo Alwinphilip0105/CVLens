@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "CVLens - AI-powered resume analysis and job matching platform"
 authors = ["Sarthak Chandervanshi <54674615+SarthakChandervanshi@users.noreply.github.com>"]
 readme = "README.md"
-packages = []
+package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.12,<3.14"
